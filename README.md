@@ -1,11 +1,102 @@
-# RISC Zero Rust Starter Template
+# ZK Privacy Transaction – RISC Zero zkVM
 
-Welcome to the RISC Zero Rust Starter Template! This template is intended to
-give you a starting point for building a project using the RISC Zero zkVM.
-Throughout the template (including in this README), you'll find comments
-labelled `TODO` in places where you'll need to make changes. To better
-understand the concepts behind this template, check out the [zkVM
-Overview][zkvm-overview].
+Chương trình Guest chạy trên RISC Zero zkVM để **ẩn thông tin giao dịch blockchain**:
+- 🔒 Địa chỉ người gửi (`sender_address`)
+- 🔒 Địa chỉ người nhận (`receiver_address`)
+- 🔒 Số tiền giao dịch (`amount`)
+
+Guest chứng minh giao dịch hợp lệ (`amount > 0` và `balance >= amount`) và commit
+các **commitment hash** ra journal công khai — blockchain xác minh proof mà không
+biết dữ liệu thật sự.
+
+---
+
+## Yêu cầu môi trường
+
+| Công cụ | Mô tả |
+|---|---|
+| Rust + Cargo | Ngôn ngữ lập trình chính |
+| rzup | RISC0 toolchain manager (cài RISC-V cross-compiler) |
+| WSL (trên Windows) | Môi trường Linux để chạy rzup |
+
+> ⚠️ **Windows:** RISC0 toolchain (`rzup`) **không hỗ trợ Git Bash / PowerShell thuần**. Cần dùng WSL (Windows Subsystem for Linux).
+
+---
+
+## Cài đặt môi trường trên Windows (WSL)
+
+### Bước 1 – Cài WSL
+
+Mở **PowerShell với quyền Administrator** và chạy:
+
+```powershell
+wsl --install
+```
+
+Khởi động lại máy sau khi cài xong. Windows sẽ tự cài **Ubuntu** làm distro mặc định.
+
+> Sau khi khởi động lại, mở app **Ubuntu** từ Start Menu để vào môi trường WSL.
+
+---
+
+### Bước 2 – Cài GCC và Rust trong WSL
+
+Trong terminal **Ubuntu WSL**:
+
+```bash
+# Cài GCC / C linker (bắt buộc, Rust cần cc để link)
+sudo apt update
+sudo apt install -y build-essential
+
+# Cài Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+```
+
+Kiểm tra:
+```bash
+gcc --version
+rustc --version
+cargo --version
+```
+
+> ⚠️ **Bỏ qua bước `build-essential` sẽ gây lỗi `linker 'cc' not found`** khi `cargo build`.
+
+---
+
+### Bước 3 – Cài RISC0 Toolchain
+
+```bash
+# Cài rzup
+curl -L https://risczero.com/install | bash
+source "$HOME/.bashrc"
+
+# Cài RISC-V cross-compiler (lần đầu mất ~5-10 phút)
+rzup install
+```
+
+Kiểm tra:
+```bash
+rzup --version
+```
+
+---
+
+### Bước 4 – Clone / truy cập dự án
+
+Nếu dự án nằm trên ổ C: của Windows, WSL có thể truy cập qua `/mnt/c/`:
+
+```bash
+cd /mnt/c/Users/Admin/PTIT/MMHCS/RISC0/my-zk-privacy-app
+```
+
+Hoặc clone mới trong WSL:
+```bash
+git clone <repo-url>
+cd my-zk-privacy-app
+```
+
+---
 
 ## Quick Start
 
@@ -19,9 +110,6 @@ command:
 ```bash
 cargo run
 ```
-
-This is an empty template, and so there is no expected output (until you modify
-the code).
 
 ### Executing the Project Locally in Development Mode
 
