@@ -120,6 +120,7 @@ cargo run
 - `--sender <HEX_ADDRESS>`: Địa chỉ ví người gửi. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte (Ví dụ định dạng ví EVM có hoặc không có `0x`).
 - `--receiver <HEX_ADDRESS>`: Địa chỉ ví người nhận. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte.
 - `--chain`: Thêm cờ này để kích hoạt luồng Submit Proof lên Sepolia Testnet (yêu cầu cấu hình sẵn file `.env`).
+- `--groth16`: Nén STARK thành Groth16 SNARK local (không cần Bonsai). Yêu cầu RAM ~16GB+ và tải Proving Key lần đầu. Mặc định: tắt.
 - `--json`: Xuất toàn bộ kết quả Proof Process dưới định dạng JSON thô thay vì hiển thị giao diện bảng biểu Terminal UI (rất hữu ích khi tích hợp script hoặc backend).
 
 **Ví dụ lệnh chạy hoàn chỉnh:**

@@ -37,6 +37,10 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     chain: bool,
 
+    /// Nén proof sang Groth16 SNARK local (yêu cầu RAM ~16GB+)
+    #[arg(long, default_value_t = false)]
+    groth16: bool,
+
     /// Xuất kết quả dạng JSON
     #[arg(long, default_value_t = false)]
     json: bool,
@@ -80,7 +84,7 @@ async fn main() -> Result<()> {
         println!("⏳ Đang chạy Executor & Prover (tạo ZK proof)...\n");
     }
 
-    let result = prover::prove_transaction(&input)?;
+    let result = prover::prove_transaction(&input, cli.groth16)?;
 
     if cli.json {
         display::print_json(&input, &result.output, result.proving_time_ms);
