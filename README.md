@@ -119,18 +119,12 @@ cargo run
 - `--balance <SỐ>`: Số dư hiện tại thực tế của người gửi để xác thực (mặc định: `1000`).
 - `--sender <HEX_ADDRESS>`: Địa chỉ ví người gửi. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte (Ví dụ định dạng ví EVM có hoặc không có `0x`).
 - `--receiver <HEX_ADDRESS>`: Địa chỉ ví người nhận. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte.
-- `--groth16`: Kích hoạt tính năng nén SNARK (Groth16). **Lưu ý:** Chế độ này localize hoàn toàn nhưng ngốn rất nhiều RAM (~16GB+) và cần tải bộ Proving Key lần đầu.
 - `--chain`: Thêm cờ này để kích hoạt luồng Submit Proof lên Sepolia Testnet (yêu cầu cấu hình sẵn file `.env`).
-- `--json`: Xuất toàn bộ kết quả Proof Process dưới định dạng JSON thô thay vì hiển thị giao diện bảng biểu Terminal UI.
+- `--json`: Xuất toàn bộ kết quả Proof Process dưới định dạng JSON thô thay vì hiển thị giao diện bảng biểu Terminal UI (rất hữu ích khi tích hợp script hoặc backend).
 
-**Ví dụ lệnh chạy hoàn chỉnh (STARK mặc định):**
+**Ví dụ lệnh chạy hoàn chỉnh:**
 ```bash
-cargo run -- --amount 250 --balance 800 --sender 0x123... --receiver 0xabc...
-```
-
-**Ví dụ lệnh nén Groth16 (Cực nặng):**
-```bash
-cargo run -- --amount 250 --groth16
+cargo run -- --amount 250 --balance 800 --sender 0x1234567890abcdef1234567890abcdef12345678 --receiver 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd
 ```
 *(Ghi chú: Nếu chạy `cargo run` trơn không kèm cờ, hệ thống tự động sinh dữ liệu ảo (Demo) để phục vụ test nhanh).*
 

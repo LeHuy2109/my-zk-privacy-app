@@ -8,28 +8,17 @@ use crate::types::{ProofResult, TransactionInput, TransactionOutput};
 
 // ─── Chạy toàn bộ pipeline: Executor → Prover → Verify ──────
 
-pub fn prove_transaction(input: &TransactionInput, groth16: bool) -> Result<ProofResult> {
+pub fn prove_transaction(input: &TransactionInput) -> Result<ProofResult> {
     let env = executor::create_executor_env(input)?;
 
     let start = Instant::now();
     let prover = default_prover();
-    
-    // Tạo initial proof (STARK)
     let prove_info = prover
         .prove(env, METHOD_ELF)
         .context("Tạo ZK proof thất bại")?;
-    
-    let mut receipt = prove_info.receipt;
-
-    // Nếu người dùng yêu cầu Groth16 nén (Localize)
-    if groth16 {
-        println!("⏳ Đang thực hiện nén STARK sang Groth16 SNARK (Local Proving)...");
-        receipt = prover
-            .compress(&receipt)
-            .context("Nén Groth16 thất bại - Máy có đủ RAM và Proving Key chưa?")?;
-    }
-
     let proving_time_ms = start.elapsed().as_millis();
+
+    let receipt = prove_info.receipt;
     let output = extract_output(&receipt)?;
 
     Ok(ProofResult {
