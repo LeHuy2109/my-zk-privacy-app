@@ -111,6 +111,29 @@ command:
 cargo run
 ```
 
+### Tuỳ chỉnh Giao dịch và Output (Custom CLI Arguments)
+
+Ứng dụng hỗ trợ cấu hình động qua giao diện dòng lệnh (CLI) để mô phỏng thực tế các kịch bản gửi/nhận khác nhau. Dưới đây là danh sách tham số bạn có thể truyền vào:
+
+- `--amount <SỐ>`: Định mức số lượng token cần chuyển (mặc định: `500`).
+- `--balance <SỐ>`: Số dư hiện tại thực tế của người gửi để xác thực (mặc định: `1000`).
+- `--sender <HEX_ADDRESS>`: Địa chỉ ví người gửi. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte (Ví dụ định dạng ví EVM có hoặc không có `0x`).
+- `--receiver <HEX_ADDRESS>`: Địa chỉ ví người nhận. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte.
+- `--groth16`: Kích hoạt tính năng nén SNARK (Groth16). **Lưu ý:** Chế độ này localize hoàn toàn nhưng ngốn rất nhiều RAM (~16GB+) và cần tải bộ Proving Key lần đầu.
+- `--chain`: Thêm cờ này để kích hoạt luồng Submit Proof lên Sepolia Testnet (yêu cầu cấu hình sẵn file `.env`).
+- `--json`: Xuất toàn bộ kết quả Proof Process dưới định dạng JSON thô thay vì hiển thị giao diện bảng biểu Terminal UI.
+
+**Ví dụ lệnh chạy hoàn chỉnh (STARK mặc định):**
+```bash
+cargo run -- --amount 250 --balance 800 --sender 0x123... --receiver 0xabc...
+```
+
+**Ví dụ lệnh nén Groth16 (Cực nặng):**
+```bash
+cargo run -- --amount 250 --groth16
+```
+*(Ghi chú: Nếu chạy `cargo run` trơn không kèm cờ, hệ thống tự động sinh dữ liệu ảo (Demo) để phục vụ test nhanh).*
+
 ### Executing the Project Locally in Development Mode
 
 During development, faster iteration upon code changes can be achieved by leveraging [dev-mode], we strongly suggest activating it during your early development phase. Furthermore, you might want to get insights into the execution statistics of your project, and this can be achieved by specifying the environment variable `RUST_LOG="[executor]=info"` before running your project.
