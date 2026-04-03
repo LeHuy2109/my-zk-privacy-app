@@ -1,13 +1,63 @@
 # ZK Privacy Transaction – RISC Zero zkVM
 
-Chương trình Guest chạy trên RISC Zero zkVM để **ẩn thông tin giao dịch blockchain**:
-- 🔒 Địa chỉ người gửi (`sender_address`)
-- 🔒 Địa chỉ người nhận (`receiver_address`)
-- 🔒 Số tiền giao dịch (`amount`)
+Chương trình chạy trên **RISC Zero zkVM** để thực hiện **giao dịch riêng tư kiểu Tornado Cash**:
+- 🔒 Secret của người gửi không bao giờ lộ ra blockchain
+- 🌳 Chứng minh note hợp lệ tồn tại trong **Merkle tree** on-chain
+- 🚫 **Nullifier** chống double-spend
+- ✅ Blockchain xác minh proof mà không biết nội dung giao dịch
 
-Guest chứng minh giao dịch hợp lệ (`amount > 0` và `balance >= amount`) và commit
-các **commitment hash** ra journal công khai — blockchain xác minh proof mà không
-biết dữ liệu thật sự.
+---
+
+## Kiến trúc ZK
+
+```
+DEPOSIT (công khai)
+  user tạo: secret (lưu bí mật)
+            commitment = SHA256(secret ∥ amount_le_bytes)
+  → gọi contract.deposit(commitment) {value: amount ETH}
+  → contract thêm commitment vào Merkle tree, cập nhật root
+
+WITHDRAW (ẩn danh – dùng ZK proof)
+  Host:  lấy merkle_root + merkle_path từ on-chain [*]
+         gửi (secret, amount, path) vào Guest (private)
+
+  Guest: tính leaf = SHA256(secret ∥ amount)
+         verify: walk_up(leaf, path) == merkle_root  ← XÁC MINH INCLUSION
+         tính:   nullifier = SHA256(secret ∥ "nullify")
+         commit public: { merkle_root, nullifier_hash, recipient, amount }
+
+  Contract: verify RISC0 proof
+            kiểm tra merkle_root khớp on-chain
+            kiểm tra nullifier chưa dùng → ghi lại
+            chuyển ETH cho recipient
+```
+
+> `[*]` Phiên bản hiện tại dùng **Merkle tree offline** (demo). Xem [Roadmap on-chain](#roadmap-tích-hợp-smart-contract).
+
+---
+
+## Input / Output
+
+### Private Input (chỉ Guest biết, không bao giờ lộ ra)
+
+| Trường | Kiểu | Mô tả |
+|---|---|---|
+| `secret` | `[u8; 32]` | Bí mật 32-byte của note (user tự giữ) |
+| `amount` | `u64` | Số tiền của note |
+| `merkle_path` | `Vec<[u8;32]>` | Sibling hashes từ leaf lên root |
+| `merkle_indices` | `Vec<bool>` | Hướng tại mỗi tầng (false=trái, true=phải) |
+| `merkle_root` | `[u8; 32]` | Root hiện tại của smart contract |
+| `recipient` | `[u8; 20]` | Địa chỉ người nhận tiền |
+
+### Public Output – Journal (ai cũng đọc được)
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `merkle_root` | `[u8; 32]` | Phải khớp on-chain root |
+| `nullifier_hash` | `[u8; 32]` | `SHA256(secret ∥ "nullify")` – chống double-spend |
+| `recipient` | `[u8; 20]` | Người nhận tiền |
+| `amount` | `u64` | Số tiền withdraw |
+| `is_valid` | `bool` | Proof hợp lệ không |
 
 ---
 
@@ -19,184 +69,223 @@ biết dữ liệu thật sự.
 | rzup | RISC0 toolchain manager (cài RISC-V cross-compiler) |
 | WSL (trên Windows) | Môi trường Linux để chạy rzup |
 
-> ⚠️ **Windows:** RISC0 toolchain (`rzup`) **không hỗ trợ Git Bash / PowerShell thuần**. Cần dùng WSL (Windows Subsystem for Linux).
+> ⚠️ **Windows:** RISC0 toolchain (`rzup`) **không hỗ trợ Git Bash / PowerShell thuần**. Cần dùng WSL.
 
 ---
 
-## Cài đặt môi trường trên Windows (WSL)
+## Cài đặt môi trường (WSL)
 
 ### Bước 1 – Cài WSL
-
-Mở **PowerShell với quyền Administrator** và chạy:
 
 ```powershell
 wsl --install
 ```
 
-Khởi động lại máy sau khi cài xong. Windows sẽ tự cài **Ubuntu** làm distro mặc định.
-
-> Sau khi khởi động lại, mở app **Ubuntu** từ Start Menu để vào môi trường WSL.
-
----
+Khởi động lại máy. Sau đó mở **Ubuntu** từ Start Menu.
 
 ### Bước 2 – Cài GCC và Rust trong WSL
 
-Trong terminal **Ubuntu WSL**:
-
 ```bash
-# Cài GCC / C linker (bắt buộc, Rust cần cc để link)
-sudo apt update
-sudo apt install -y build-essential
-
-# Cài Rust
+sudo apt update && sudo apt install -y build-essential
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 ```
 
-Kiểm tra:
-```bash
-gcc --version
-rustc --version
-cargo --version
-```
-
-> ⚠️ **Bỏ qua bước `build-essential` sẽ gây lỗi `linker 'cc' not found`** khi `cargo build`.
-
----
+> ⚠️ Bỏ qua `build-essential` sẽ gây lỗi `linker 'cc' not found`.
 
 ### Bước 3 – Cài RISC0 Toolchain
 
 ```bash
-# Cài rzup
 curl -L https://risczero.com/install | bash
 source "$HOME/.bashrc"
-
-# Cài RISC-V cross-compiler (lần đầu mất ~5-10 phút)
-rzup install
+rzup install   # lần đầu mất ~5-10 phút
 ```
 
-Kiểm tra:
-```bash
-rzup --version
-```
-
----
-
-### Bước 4 – Clone / truy cập dự án
-
-Nếu dự án nằm trên ổ C: của Windows, WSL có thể truy cập qua `/mnt/c/`:
+### Bước 4 – Truy cập dự án
 
 ```bash
+# Nếu dự án nằm trên Windows
 cd /mnt/c/Users/Admin/PTIT/MMHCS/RISC0/my-zk-privacy-app
-```
 
-Hoặc clone mới trong WSL:
-```bash
-git clone <repo-url>
-cd my-zk-privacy-app
+# Hoặc clone mới
+git clone <repo-url> && cd my-zk-privacy-app
 ```
 
 ---
 
 ## Quick Start
 
-First, make sure [rustup] is installed. The
-[`rust-toolchain.toml`][rust-toolchain] file will be used by `cargo` to
-automatically install the correct version.
+### Chạy nhanh (Dev Mode – không cần prove thật)
 
-To build all methods and execute the method within the zkVM, run the following
-command:
+```bash
+RISC0_DEV_MODE=1 cargo run
+```
+
+### Chạy với tham số tuỳ chỉnh
+
+```bash
+# Chỉ định số tiền
+RISC0_DEV_MODE=1 cargo run -- --amount 300
+
+# Chỉ định người nhận
+RISC0_DEV_MODE=1 cargo run -- --amount 300 --recipient 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd
+
+# Xuất JSON (dùng để tích hợp với script hoặc backend)
+RISC0_DEV_MODE=1 cargo run -- --json
+
+# Gửi proof lên Sepolia (cần cấu hình .env)
+RISC0_DEV_MODE=1 cargo run -- --chain
+```
+
+### CLI Arguments
+
+| Tham số | Mặc định | Mô tả |
+|---|---|---|
+| `--amount <N>` | `500` | Số tiền withdraw |
+| `--recipient <HEX>` | demo address | Địa chỉ người nhận (20-byte hex, có/không có `0x`) |
+| `--chain` | `false` | Gửi proof lên Sepolia Testnet |
+| `--groth16` | `false` | Nén STARK → Groth16 SNARK (cần RAM ~16GB+) |
+| `--json` | `false` | Xuất kết quả dạng JSON thay vì terminal UI |
+
+### Chạy Full Proof (chậm, proof thật)
 
 ```bash
 cargo run
+cargo run -- --amount 300 --recipient 0x1234567890abcdef1234567890abcdef12345678
 ```
 
-### Tuỳ chỉnh Giao dịch và Output (Custom CLI Arguments)
-
-Ứng dụng hỗ trợ cấu hình động qua giao diện dòng lệnh (CLI) để mô phỏng thực tế các kịch bản gửi/nhận khác nhau. Dưới đây là danh sách tham số bạn có thể truyền vào:
-
-- `--amount <SỐ>`: Định mức số lượng token cần chuyển (mặc định: `500`).
-- `--balance <SỐ>`: Số dư hiện tại thực tế của người gửi để xác thực (mặc định: `1000`).
-- `--sender <HEX_ADDRESS>`: Địa chỉ ví người gửi. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte (Ví dụ định dạng ví EVM có hoặc không có `0x`).
-- `--receiver <HEX_ADDRESS>`: Địa chỉ ví người nhận. **Bắt buộc** là chuỗi Hexadecimal dài chuẩn 20-byte.
-- `--chain`: Thêm cờ này để kích hoạt luồng Submit Proof lên Sepolia Testnet (yêu cầu cấu hình sẵn file `.env`).
-- `--json`: Xuất toàn bộ kết quả Proof Process dưới định dạng JSON thô thay vì hiển thị giao diện bảng biểu Terminal UI (rất hữu ích khi tích hợp script hoặc backend).
-
-**Ví dụ lệnh chạy hoàn chỉnh:**
-```bash
-cargo run -- --amount 250 --balance 800 --sender 0x1234567890abcdef1234567890abcdef12345678 --receiver 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd
-```
-*(Ghi chú: Nếu chạy `cargo run` trơn không kèm cờ, hệ thống tự động sinh dữ liệu ảo (Demo) để phục vụ test nhanh).*
-
-### Executing the Project Locally in Development Mode
-
-During development, faster iteration upon code changes can be achieved by leveraging [dev-mode], we strongly suggest activating it during your early development phase. Furthermore, you might want to get insights into the execution statistics of your project, and this can be achieved by specifying the environment variable `RUST_LOG="[executor]=info"` before running your project.
-
-Put together, the command to run your project in development mode while getting execution statistics is:
+### Dev Mode với log chi tiết
 
 ```bash
 RUST_LOG="[executor]=info" RISC0_DEV_MODE=1 cargo run
 ```
 
-### Running Proofs Remotely on Bonsai
-
-_Note: The Bonsai proving service is still in early Alpha; an API key is
-required for access. [Click here to request access][bonsai access]._
-
-If you have access to the URL and API key to Bonsai you can run your proofs
-remotely. To prove in Bonsai mode, invoke `cargo run` with two additional
-environment variables:
+### Chạy trên Bonsai (remote proving)
 
 ```bash
 BONSAI_API_KEY="YOUR_API_KEY" BONSAI_API_URL="BONSAI_URL" cargo run
 ```
 
-## How to Create a Project Based on This Template
+---
 
-Search this template for the string `TODO`, and make the necessary changes to
-implement the required feature described by the `TODO` comment. Some of these
-changes will be complex, and so we have a number of instructional resources to
-assist you in learning how to write your own code for the RISC Zero zkVM:
+## Cấu hình Sepolia (`.env`)
 
-- The [RISC Zero Developer Docs][dev-docs] is a great place to get started.
-- Example projects are available in the [examples folder][examples] of
-  [`risc0`][risc0-repo] repository.
-- Reference documentation is available at [https://docs.rs][docs.rs], including
-  [`risc0-zkvm`][risc0-zkvm], [`cargo-risczero`][cargo-risczero],
-  [`risc0-build`][risc0-build], and [others][crates].
+Copy `.env.example` → `.env` và điền:
 
-## Directory Structure
-
-It is possible to organize the files for these components in various ways.
-However, in this starter template we use a standard directory structure for zkVM
-applications, which we think is a good starting point for your applications.
-
-```text
-project_name
-├── Cargo.toml
-├── host
-│   ├── Cargo.toml
-│   └── src
-│       └── main.rs                    <-- [Host code goes here]
-└── methods
-    ├── Cargo.toml
-    ├── build.rs
-    ├── guest
-    │   ├── Cargo.toml
-    │   └── src
-    │       └── method_name.rs         <-- [Guest code goes here]
-    └── src
-        └── lib.rs
+```bash
+SEPOLIA_RPC_URL=https://rpc.sepolia.org
+PRIVATE_KEY=0x_YOUR_PRIVATE_KEY_HERE
+CONTRACT_ADDRESS=0x_YOUR_CONTRACT_ADDRESS_HERE
 ```
 
-## Video Tutorial
+---
 
-For a walk-through of how to build with this template, check out this [excerpt
-from our workshop at ZK HACK III][zkhack-iii].
+## Cấu trúc thư mục
 
-## Questions, Feedback, and Collaborations
+```text
+my-zk-privacy-app/
+├── Cargo.toml
+├── .env.example
+├── host/
+│   └── src/
+│       ├── main.rs        ← CLI entry point, điều phối pipeline
+│       ├── executor.rs    ← Build TransactionInput + Merkle tree (offline demo)
+│       ├── prover.rs      ← Chạy RISC0 prover, verify receipt
+│       ├── chain.rs       ← Gửi proof lên Sepolia
+│       ├── display.rs     ← In kết quả ra terminal / JSON
+│       └── types.rs       ← Struct dùng chung
+└── methods/
+    └── guest/src/
+        └── main.rs        ← ZK circuit: Merkle verify + Nullifier
+```
 
-We'd love to hear from you on [Discord][discord] or [Twitter][twitter].
+---
+
+## Roadmap tích hợp Smart Contract
+
+Phiên bản hiện tại dùng **Merkle tree offline** (demo). Để tích hợp với smart contract thật trên Sepolia, cần thực hiện các bước sau:
+
+### Những gì KHÔNG cần sửa ✅
+
+- `methods/guest/src/main.rs` — ZK circuit hoàn chỉnh
+- `host/src/types.rs` — Struct Input/Output đã khớp
+- `host/src/prover.rs` — Pipeline prove/verify
+- `host/src/display.rs` — Chỉ hiển thị
+
+### Những gì CẦN sửa khi có contract thật ⚠️
+
+**1. `TREE_DEPTH` trong `guest/main.rs` và `executor.rs`**
+```
+Đổi từ 4 → 20 (khớp với hằng số trong Solidity contract).
+⚠️ Thay đổi này làm IMAGE_ID thay đổi hoàn toàn.
+   Contract phải được deploy với IMAGE_ID mới tương ứng.
+```
+
+**2. `executor.rs` – `build_merkle_for_note()`**
+```
+Thay Merkle tree offline bằng:
+  1. Query tất cả Deposit(bytes32 commitment) events từ contract
+  2. Gọi contract.currentRoot() để lấy root chính xác
+  3. Rebuild cây Merkle từ events (giống hệt contract)
+  4. Tính merkle_path + merkle_indices theo index của leaf
+```
+
+**3. `chain.rs` – `submit_proof()`**
+```
+Thay calldata thủ công bằng ABI-encoded call:
+  - Dùng alloy::sol! macro với ABI contract thật
+  - Function: withdraw(bytes journal, bytes seal)
+  - Thêm: deposit(bytes32 commitment) payable
+  - Thêm: query_deposits() để đọc events
+```
+
+### Smart Contract cần viết (repo Solidity riêng)
+
+```solidity
+contract PrivacyPool {
+    // Incremental Merkle tree (depth = TREE_DEPTH)
+    bytes32 public currentRoot;
+    mapping(bytes32 => bool) public nullifierUsed;
+
+    function deposit(bytes32 commitment) external payable { ... }
+    function withdraw(
+        bytes calldata seal,       // RISC0 ZK proof
+        bytes32 nullifierHash,
+        address recipient,
+        uint256 amount
+    ) external { ... }
+}
+```
+
+Contract cần tích hợp với **RISC0 Verifier** đã deploy sẵn trên Sepolia:
+- RISC0 Verifier Sepolia: xem tại [dev.risczero.com/api/blockchain-integration/contracts/verifier](https://dev.risczero.com/api/blockchain-integration/contracts/verifier)
+
+---
+
+## Bảo mật ZK
+
+| Dữ liệu | Ai biết? | Lộ ra không? |
+|---|---|---|
+| `secret` | Chỉ user | ❌ Không |
+| `amount` | Chỉ user | ❌ Không |
+| `merkle_path` | Chỉ host + guest | ❌ Không |
+| `merkle_root` | **Công khai** | ✅ Journal + On-chain |
+| `nullifier_hash` | **Công khai** | ✅ Journal + On-chain |
+| `recipient` | **Công khai** | ✅ Journal + On-chain |
+| ZK Proof (seal) | **Công khai** | ✅ On-chain |
+
+**Kết quả**: Blockchain xác minh được *"note hợp lệ đã được chi tiêu đúng một lần"* mà không biết secret, ai gửi, hay lịch sử giao dịch.
+
+---
+
+## Tài liệu tham khảo
+
+- [RISC Zero Developer Docs][dev-docs]
+- [RISC Zero zkVM API][risc0-zkvm]
+- [Blockchain Integration Guide][blockchain-integration]
+- [Dev Mode][dev-mode]
+- [Bonsai Access][bonsai access]
+- [Examples][examples]
 
 [bonsai access]: https://bonsai.xyz/apply
 [cargo-risczero]: https://docs.rs/cargo-risczero
@@ -209,6 +298,7 @@ We'd love to hear from you on [Discord][discord] or [Twitter][twitter].
 [risc0-build]: https://docs.rs/risc0-build
 [risc0-repo]: https://www.github.com/risc0/risc0
 [risc0-zkvm]: https://docs.rs/risc0-zkvm
+[blockchain-integration]: https://dev.risczero.com/api/blockchain-integration
 [rust-toolchain]: rust-toolchain.toml
 [rustup]: https://rustup.rs
 [twitter]: https://twitter.com/risczero

@@ -4,20 +4,22 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionInput {
-    pub sender_address: [u8; 20],
-    pub receiver_address: [u8; 20],
+    pub secret: [u8; 32],
     pub amount: u64,
-    pub sender_balance: u64,
-    pub nonce: [u8; 32],
+    pub merkle_path: Vec<[u8; 32]>,
+    pub merkle_indices: Vec<bool>,
+    pub merkle_root: [u8; 32],
+    pub recipient: [u8; 20],
 }
 
-// ─── Public Output (commit ra journal, ai cũng đọc được) ─────
+// ─── Public Output (commit ra journal) ───────────────────────
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionOutput {
-    pub sender_commitment: [u8; 32],
-    pub receiver_commitment: [u8; 32],
-    pub amount_commitment: [u8; 32],
+    pub merkle_root: [u8; 32],
+    pub nullifier_hash: [u8; 32],
+    pub recipient: [u8; 20],
+    pub amount: u64,
     pub is_valid: bool,
 }
 
@@ -43,10 +45,8 @@ impl ChainConfig {
         Ok(Self {
             rpc_url: std::env::var("SEPOLIA_RPC_URL")
                 .unwrap_or_else(|_| "https://rpc.sepolia.org".to_string()),
-            private_key: std::env::var("PRIVATE_KEY")
-                .unwrap_or_default(),
-            contract_address: std::env::var("CONTRACT_ADDRESS")
-                .unwrap_or_default(),
+            private_key: std::env::var("PRIVATE_KEY").unwrap_or_default(),
+            contract_address: std::env::var("CONTRACT_ADDRESS").unwrap_or_default(),
         })
     }
 

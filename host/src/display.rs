@@ -5,158 +5,138 @@ use crate::types::{ProofResult, TransactionInput, TransactionOutput};
 pub fn print_banner() {
     println!();
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║       🔐  ZK PRIVACY TRANSACTION – RISC ZERO  🔐        ║");
-    println!("║        Giao dịch bảo mật Zero-Knowledge Proof            ║");
+    println!("║   🔐  ZK PRIVACY – MERKLE INCLUSION + NULLIFIER  🔐     ║");
+    println!("║        RISC Zero zkVM  •  Giao dịch Bảo mật             ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
 }
 
-// ─── Hiển thị input summary ──────────────────────────────────
+// ─── Input summary ───────────────────────────────────────────
 
 pub fn print_input_summary(input: &TransactionInput) {
     println!("┌──────────────────────────────────────────────────────────┐");
-    println!("│      THÔNG TIN GIAO DỊCH (Private – chỉ host biết)       │");
+    println!("│      PRIVATE INPUT (chỉ host & guest biết)               │");
     println!("├──────────────────────────────────────────────────────────┤");
     println!(
-        "│  Người gửi:   0x{}...{}",
-        hex_short(&input.sender_address[..3]),
-        hex_short(&input.sender_address[17..])
+        "│  Secret:      {}...  [PRIVATE]",
+        hex_short(&input.secret[..4])
+    );
+    println!("│  Amount:      {} token", input.amount);
+    println!(
+        "│  Recipient:   0x{}...{}",
+        hex_short(&input.recipient[..3]),
+        hex_short(&input.recipient[17..])
     );
     println!(
-        "│  Người nhận:  0x{}...{}",
-        hex_short(&input.receiver_address[..3]),
-        hex_short(&input.receiver_address[17..])
+        "│  Merkle Root: {}...",
+        hex_short(&input.merkle_root[..8])
     );
-    println!("│  Số tiền:     {} token", input.amount);
-    println!("│  Số dư gửi:   {} token", input.sender_balance);
     println!(
-        "│  Nonce:       {}...",
-        hex_short(&input.nonce[..8])
+        "│  Tree Depth:  {} tầng ({} slots)",
+        input.merkle_path.len(),
+        1usize << input.merkle_path.len()
     );
     println!("└──────────────────────────────────────────────────────────┘");
     println!();
 }
 
-// ─── Hiển thị kết quả proving ────────────────────────────────
+// ─── Proof result ────────────────────────────────────────────
 
 pub fn print_proof_result(result: &ProofResult) {
-    let output = &result.output;
-
+    let o = &result.output;
     println!("┌──────────────────────────────────────────────────────────┐");
-    println!("│      KẾT QUẢ EXECUTOR & PROVER                           │");
+    println!("│      KẾT QUẢ PROOF                                       │");
     println!("├──────────────────────────────────────────────────────────┤");
-    println!("│  Trạng thái:  {}", status_icon(output.is_valid));
+    println!("│  Trạng thái:  {}", if o.is_valid { "HỢP LỆ ✅" } else { "KHÔNG HỢP LỆ ❌" });
     println!("│  Thời gian:   {} ms", result.proving_time_ms);
     println!("├──────────────────────────────────────────────────────────┤");
-    println!("│       COMMITMENT HASH (Public – Journal)                 │");
+    println!("│      PUBLIC OUTPUT – JOURNAL (ai cũng đọc được)         │");
     println!("├──────────────────────────────────────────────────────────┤");
+    println!("│  Merkle Root:    {}", hex_encode(&o.merkle_root));
+    println!("│  Nullifier Hash: {}", hex_encode(&o.nullifier_hash));
     println!(
-        "│  Sender:    {}",
-        hex_encode(&output.sender_commitment)
+        "│  Recipient:      0x{}...{}",
+        hex_short(&o.recipient[..3]),
+        hex_short(&o.recipient[17..])
     );
-    println!(
-        "│  Receiver:  {}",
-        hex_encode(&output.receiver_commitment)
-    );
-    println!(
-        "│  Amount:    {}",
-        hex_encode(&output.amount_commitment)
-    );
+    println!("│  Amount:         {} token", o.amount);
     println!("└──────────────────────────────────────────────────────────┘");
     println!();
 }
 
-// ─── Hiển thị kết quả verify ─────────────────────────────────
+// ─── Verification ────────────────────────────────────────────
 
 pub fn print_verification_success() {
     println!("┌──────────────────────────────────────────────────────────┐");
-    println!("│       XÁC MINH PROOF (Local Verification)                │");
+    println!("│      XÁC MINH PROOF (Local)                              │");
     println!("├──────────────────────────────────────────────────────────┤");
-    println!("│   ZK Proof hợp lệ!                                       │");
-    println!("│   Receipt khớp với METHOD_ID                             │");
-    println!("│   Journal chưa bị thay đổi                               │");
+    println!("│  ✅ ZK Proof hợp lệ                                      │");
+    println!("│  ✅ Receipt khớp METHOD_ID                               │");
+    println!("│  ✅ Merkle inclusion được chứng minh                     │");
+    println!("│  ✅ Nullifier hash đã tạo (sẵn sàng gửi on-chain)       │");
     println!("└──────────────────────────────────────────────────────────┘");
     println!();
 }
 
-// ─── Hiển thị kết quả Sepolia ────────────────────────────────
+// ─── Chain result ────────────────────────────────────────────
 
 pub fn print_chain_result(tx_hash: &str, block: Option<u64>, gas: Option<u128>) {
     println!("┌──────────────────────────────────────────────────────────┐");
-    println!("│       KẾT QUẢ SEPOLIA TESTNET                            │");
+    println!("│      SEPOLIA TESTNET                                      │");
     println!("├──────────────────────────────────────────────────────────┤");
-    println!("│  Tx Hash:   {}", tx_hash);
-    if let Some(b) = block {
-        println!("│  Block:     #{}", b);
-    }
-    if let Some(g) = gas {
-        println!("│  Gas Used:  {}", g);
-    }
-    println!("│  Explorer:  https://sepolia.etherscan.io/tx/{}", tx_hash);
+    println!("│  Tx:    {}", tx_hash);
+    if let Some(b) = block { println!("│  Block: #{}", b); }
+    if let Some(g) = gas   { println!("│  Gas:   {}", g); }
     println!("└──────────────────────────────────────────────────────────┘");
     println!();
 }
 
-// ─── Hiển thị khi skip chain ─────────────────────────────────
-
 pub fn print_chain_skipped() {
     println!("┌──────────────────────────────────────────────────────────┐");
-    println!("│     SEPOLIA TESTNET: BỎ QUA                              │");
-    println!("├──────────────────────────────────────────────────────────┤");
-    println!("│  Chưa cấu hình .env (PRIVATE_KEY, CONTRACT_ADDRESS).     │");
-    println!("│  Dùng --chain flag và cấu hình .env để gửi on-chain.     │");
+    println!("│  SEPOLIA: bỏ qua (cần --chain + cấu hình .env)          │");
     println!("└──────────────────────────────────────────────────────────┘");
     println!();
 }
 
 // ─── JSON output ─────────────────────────────────────────────
 
-pub fn print_json(input: &TransactionInput, output: &TransactionOutput, proving_time_ms: u128) {
+pub fn print_json(input: &TransactionInput, output: &TransactionOutput, ms: u128) {
     let json = serde_json::json!({
-        "transaction": {
-            "sender_commitment": hex_encode(&output.sender_commitment),
-            "receiver_commitment": hex_encode(&output.receiver_commitment),
-            "amount_commitment": hex_encode(&output.amount_commitment),
-            "is_valid": output.is_valid,
+        "journal": {
+            "merkle_root":    hex_encode(&output.merkle_root),
+            "nullifier_hash": hex_encode(&output.nullifier_hash),
+            "recipient":      format!("0x{}", hex_encode(&output.recipient)),
+            "amount":         output.amount,
+            "is_valid":       output.is_valid,
         },
         "private_input": {
+            // Chỉ tiết lộ amount trong JSON (secret không bao giờ lộ ra)
             "amount": input.amount,
-            "sender_balance": input.sender_balance,
         },
-        "proving_time_ms": proving_time_ms,
+        "proving_time_ms": ms,
     });
-
     println!("{}", serde_json::to_string_pretty(&json).unwrap());
 }
 
-// ─── Summary cho báo cáo ─────────────────────────────────────
+// ─── Summary ─────────────────────────────────────────────────
 
 pub fn print_summary() {
     println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║         TÓM TẮT                                          ║");
+    println!("║  TÓM TẮT                                                 ║");
     println!("╠══════════════════════════════════════════════════════════╣");
-    println!("║  • Dữ liệu private (sender, receiver, amount) KHÔNG      ║");
-    println!("║    bao giờ xuất hiện trên blockchain.                    ║");
-    println!("║  • Blockchain chỉ lưu commitment hash + ZK proof.        ║");
-    println!("║  • Bất kỳ ai cũng verify được proof mà không biết        ║");
-    println!("║    thông tin gốc.                                        ║");
+    println!("║  • Secret, amount KHÔNG BAO GIỜ lộ ra journal/chain.    ║");
+    println!("║  • Merkle inclusion chứng minh note tồn tại on-chain.   ║");
+    println!("║  • Nullifier hash lưu trên contract chống double-spend.  ║");
+    println!("║  • Smart contract chỉ thấy: root, nullifier, recipient.  ║");
     println!("╚══════════════════════════════════════════════════════════╝");
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────
 
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+fn hex_encode(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{:02x}", x)).collect()
 }
 
-fn hex_short(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-fn status_icon(valid: bool) -> &'static str {
-    if valid {
-        "Giao dịch HỢP LỆ"
-    } else {
-        "Giao dịch KHÔNG HỢP LỆ"
-    }
+fn hex_short(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{:02x}", x)).collect()
 }

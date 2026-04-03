@@ -22,6 +22,13 @@ pub struct ChainSubmitResult {
 
 // ─── Submit proof lên Sepolia ─────────────────────────────────
 
+/// Gửi proof lên smart contract Sepolia.
+///
+/// TODO(on-chain): Cần cập nhật khi có contract thật:
+///   1. Thay `calldata` bằng ABI-encoded call từ contract ABI chính xác
+///      (dùng alloy sol! macro hoặc alloy::sol_types)
+///   2. Đường gọi: contract.withdraw(journal_bytes, seal_bytes, nullifier, recipient)
+///   3. Kiểm tra gas estimate trước khi gửi để tránh out-of-gas
 pub async fn submit_proof(
     receipt: &Receipt,
     config: &ChainConfig,
@@ -84,6 +91,11 @@ pub async fn submit_proof(
 
 // ─── Kiểm tra balance ví trên Sepolia ─────────────────────────
 
+/// Kiểm tra balance ví trên Sepolia.
+///
+/// TODO(on-chain): Thêm 2 hàm nữa cho luồng đầy đủ:
+///   - `deposit(commitment, amount)` – gọi contract.deposit() để đăng ký note mới
+///   - `query_deposits()` – đọc tất cả Deposit events để rebuild Merkle tree
 pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
     let signer: PrivateKeySigner = config
         .private_key
@@ -109,9 +121,11 @@ pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
 // ─── Helpers ──────────────────────────────────────────────────
 
 fn encode_submit_proof_calldata(journal: &[u8], seal: &[u8]) -> Bytes {
-    // Encode: submitProof(bytes journal, bytes seal)
-    // Function selector (placeholder – thay bằng selector thực từ contract ABI)
-    let selector: [u8; 4] = [0xc0, 0x4b, 0x8d, 0x59];
+    // TODO(on-chain): Thay selector giả này bằng selector thật từ ABI contract.
+    // Cách tính: keccak256("withdraw(bytes,bytes)")[..4]
+    // Hoặc dùng: alloy::sol!(function withdraw(bytes journal, bytes seal) external;)
+    // và để alloy tự encode calldata chính xác.
+    let selector: [u8; 4] = [0xc0, 0x4b, 0x8d, 0x59]; // TODO(on-chain): placeholder – ĐỔI
 
     let mut calldata = Vec::new();
     calldata.extend_from_slice(&selector);
