@@ -87,7 +87,7 @@ rzup --version
 Nếu dự án nằm trên ổ C: của Windows, WSL có thể truy cập qua `/mnt/c/`:
 
 ```bash
-cd /mnt/c/Users/Admin/PTIT/MMHCS/RISC0/my-zk-privacy-app
+cd /mnt/c/path/to/project/my-zk-privacy-app
 ```
 
 Hoặc clone mới trong WSL:
@@ -110,6 +110,18 @@ command:
 ```bash
 cargo run
 ```
+
+### ⚙️ Cấu hình Môi trường (Sepolia Testnet)
+
+Để sử dụng các tính năng on-chain như **tự động lấy số dư ví** hoặc **gửi ZK Proof lên Sepolia**, bạn cần cấu hình file môi trường:
+
+1.  **Tạo file `.env`**: Copy file mẫu nội dung từ `.env.example` thành `.env`.
+2.  **Lấy RPC URL**: Đăng ký một tài khoản trên [Alchemy](https://www.alchemy.com/) hoặc [Infura](https://infura.io/), tạo một App mới và chọn mạng **Sepolia**. Copy đường dẫn HTTP RPC URL vào biến `SEPOLIA_RPC_URL`.
+3.  **Private Key**: Xuất Private Key từ ví MetaMask (hoặc ví test) của bạn và dán vào `PRIVATE_KEY`.
+    *   *Lưu ý: Đảm bảo ví của bạn có ít ETH Sepolia để trả phí gas.*
+4.  **Contract Address**: Điền địa chỉ Smart Contract Verifier đã deploy trên mạng Sepolia vào `CONTRACT_ADDRESS`.
+
+---
 
 ### Tuỳ chỉnh Giao dịch và Output (Custom CLI Arguments)
 
