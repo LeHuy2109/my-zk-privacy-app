@@ -1,0 +1,4 @@
+risc0/=lib/risc0-ethereum/contracts/src/
+openzeppelin-contracts/=lib/risc0-ethereum/lib/openzeppelin-contracts/
+@openzeppelin/contracts/=lib/risc0-ethereum/lib/openzeppelin-contracts/contracts/
+forge-std/=lib/risc0-ethereum/lib/forge-std/src/
