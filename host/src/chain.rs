@@ -50,11 +50,29 @@ pub async fn submit_proof(
 
     // Encode proof data thành calldata
     let journal_bytes = receipt.journal.bytes.clone();
+    
+    // Nén seal với Selector EVM chuẩn từ RISC Zero
     let seal_bytes = match receipt.inner.groth16() {
-        Ok(groth16) => groth16.seal.clone(),
-        Err(_) => serde_json::to_vec(&receipt.inner)
-            .context("Serialize receipt seal thất bại")?,
+        Ok(groth16) => {
+            // Lấy 4 bytes đầu của verifier_parameters làm EVM selector
+            use risc0_zkvm::sha::Digestible;
+            let selector = &groth16.verifier_parameters.as_bytes()[..4];
+            
+            let mut encoded = Vec::with_capacity(selector.len() + groth16.seal.len());
+            encoded.extend_from_slice(selector);
+            encoded.extend_from_slice(groth16.seal.as_ref());
+            
+            println!("✅ Đã trích xuất chính xác Groth16 Seal (kèm EVM Selector, size: {} bytes).", encoded.len());
+            encoded
+        },
+        Err(_) => {
+            let json_bytes = serde_json::to_vec(&receipt.inner).context("Serialize receipt seal thất bại")?;
+            println!("⚠️ Chú ý: Bằng chứng KHÔNG phải Groth16. Đang gửi dưới dạng JSON (size: {} bytes). Điều này CÓ THỂ gây lỗi RPC Limit!!", json_bytes.len());
+            json_bytes
+        }
     };
+
+
     let nullifier = output.nullifier_hash;
     let recipient = output.recipient;
 
