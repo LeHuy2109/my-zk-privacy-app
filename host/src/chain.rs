@@ -50,8 +50,11 @@ pub async fn submit_proof(
 
     // Encode proof data thành calldata
     let journal_bytes = receipt.journal.bytes.clone();
-    let seal_bytes = serde_json::to_vec(&receipt.inner)
-        .context("Serialize receipt seal thất bại")?;
+    let seal_bytes = match receipt.inner.groth16() {
+        Ok(groth16) => groth16.seal.clone(),
+        Err(_) => serde_json::to_vec(&receipt.inner)
+            .context("Serialize receipt seal thất bại")?,
+    };
     let nullifier = output.nullifier_hash;
     let recipient = output.recipient;
 
