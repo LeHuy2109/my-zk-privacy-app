@@ -31,7 +31,7 @@ risc0_zkvm::guest::entry!(main);
 /// TODO(on-chain): Đổi thành depth mà contract dùng (thường là 20, tức 2^20 ≈ 1M slots).
 /// Thay đổi giá trị này sẽ làm IMAGE_ID của guest thay đổi hoàn toàn.
 /// Contract phải được deploy với IMAGE_ID mới tương ứng.
-const TREE_DEPTH: usize = 4; // TODO(on-chain): đổi thành 20 để khớp contract thật
+const TREE_DEPTH: usize = 20; // TODO(on-chain): đổi thành 20 để khớp contract thật
 
 // ─── Private Input ────────────────────────────────────────────
 #[derive(Serialize, Deserialize)]
@@ -126,6 +126,19 @@ fn compute_root_from_path(
     node
 }
 
+use alloy_primitives::{Address, FixedBytes, U256};
+use alloy_sol_types::{sol, SolType};
+
+sol! {
+    struct Journal {
+        bytes32 merkle_root;
+        bytes32 nullifier_hash;
+        address recipient;
+        uint256 amount;
+        bool is_valid;
+    }
+}
+
 // ─── Entry point ──────────────────────────────────────────────
 
 fn main() {
@@ -155,16 +168,16 @@ fn main() {
     //    ✓ Amount > 0
     let is_valid = valid_depth && root_matches && tx.amount > 0;
 
-    // 7. Commit public output ra journal
-    //    Smart contract đọc phần này để:
-    //      - Kiểm tra merkle_root khớp on-chain root
-    //      - Kiểm tra nullifier_hash chưa từng dùng
-    //      - Chuyển tiền cho recipient
-    env::commit(&TransactionOutput {
-        merkle_root: tx.merkle_root,
-        nullifier_hash,
-        recipient: tx.recipient,
-        amount: tx.amount,
+    // 7. Commit public output ra journal theo chuẩn ABI encode
+    //    Hợp đồng tĩnh trên Solidity sẽ đọc trực tiếp bằng abi.decode.
+    let journal = Journal {
+        merkle_root: tx.merkle_root.into(),
+        nullifier_hash: nullifier_hash.into(),
+        recipient: tx.recipient.into(),
+        amount: U256::from(tx.amount),
         is_valid,
-    });
+    };
+
+    let encoded = Journal::abi_encode(&journal);
+    env::commit_slice(&encoded);
 }
