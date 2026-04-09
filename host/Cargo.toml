@@ -23,6 +23,8 @@ alloy = { version = "1", default-features = false, features = [
     "signer-local",
     "network",
     "rpc-types",
-    "consensus",
+    "consensus", "sol-types",
     "reqwest-rustls-tls",
 ] }
+alloy-sol-types = "1.5.7"
+alloy-primitives = "1.5.7"

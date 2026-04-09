@@ -8,7 +8,7 @@ use alloy::{
 use anyhow::{Context, Result};
 use risc0_zkvm::Receipt;
 
-use crate::types::ChainConfig;
+use crate::types::{ChainConfig, TransactionOutput};
 
 // ─── Kết quả gửi proof lên chain ─────────────────────────────
 
@@ -31,6 +31,7 @@ pub struct ChainSubmitResult {
 ///   3. Kiểm tra gas estimate trước khi gửi để tránh out-of-gas
 pub async fn submit_proof(
     receipt: &Receipt,
+    output: &TransactionOutput,
     config: &ChainConfig,
 ) -> Result<ChainSubmitResult> {
     let signer: PrivateKeySigner = config
@@ -51,8 +52,18 @@ pub async fn submit_proof(
     let journal_bytes = receipt.journal.bytes.clone();
     let seal_bytes = serde_json::to_vec(&receipt.inner)
         .context("Serialize receipt seal thất bại")?;
+    let nullifier = output.nullifier_hash;
+    let recipient = output.recipient;
 
-    let calldata = encode_submit_proof_calldata(&journal_bytes, &seal_bytes);
+    let recipient_addr: Address = recipient.into();
+
+    let call = IPrivacyVerifier::withdrawCall {
+        journal: journal_bytes.into(),
+        seal: seal_bytes.into(),
+        nullifier: nullifier.into(),
+        recipient: recipient_addr,
+    };
+    let calldata = Bytes::from(call.abi_encode());
 
     let contract_addr: Address = config
         .contract_address
@@ -89,13 +100,59 @@ pub async fn submit_proof(
     })
 }
 
+// ─── Query Deposit Events ───────────────────────────────────────
+
+/// Query tất cả Deposit events từ contract để lấy danh sách commitments.
+/// Được dùng để rebuild Merkle tree on-chain.
+pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>> {
+    use alloy::primitives::keccak256;
+    
+    let rpc_url = config
+        .rpc_url
+        .parse()
+        .context("Parse RPC URL thất bại")?;
+
+    let provider = ProviderBuilder::new().connect_http(rpc_url);
+
+    let contract_addr: Address = config
+        .contract_address
+        .parse()
+        .context("Parse contract address thất bại")?;
+
+    // Keccak256("Deposit(bytes32,uint256)") – event signature
+    let deposit_event_sig = keccak256(b"Deposit(bytes32,uint256)");
+
+    // Query logs từ contract với event signature
+    // Alchemy free tier giới hạn dải block. 10620000 là block gần lúc deploy.
+    let filter = alloy::rpc::types::Filter::new()
+        .address(contract_addr)
+        .event_signature(deposit_event_sig)
+        .from_block(10620000);
+
+    let logs = provider
+        .get_logs(&filter)
+        .await
+        .context("Query Deposit events thất bại")?;
+
+    let mut commitments = Vec::new();
+
+    for log in logs {
+        let topics = log.topics();
+        if topics.len() >= 2 {
+            // topic[0] = event signature
+            // topic[1] = commitment (indexed param)
+            let commitment_fixed = topics[1];
+            let commitment: [u8; 32] = commitment_fixed.into();
+            commitments.push(commitment);
+        }
+    }
+
+    Ok(commitments)
+}
+
 // ─── Kiểm tra balance ví trên Sepolia ─────────────────────────
 
 /// Kiểm tra balance ví trên Sepolia.
-///
-/// TODO(on-chain): Thêm 2 hàm nữa cho luồng đầy đủ:
-///   - `deposit(commitment, amount)` – gọi contract.deposit() để đăng ký note mới
-///   - `query_deposits()` – đọc tất cả Deposit events để rebuild Merkle tree
 pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
     let signer: PrivateKeySigner = config
         .private_key
@@ -118,40 +175,15 @@ pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
     Ok(balance)
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
+use alloy::sol_types::{sol, SolCall};
 
-fn encode_submit_proof_calldata(journal: &[u8], seal: &[u8]) -> Bytes {
-    // TODO(on-chain): Thay selector giả này bằng selector thật từ ABI contract.
-    // Cách tính: keccak256("withdraw(bytes,bytes)")[..4]
-    // Hoặc dùng: alloy::sol!(function withdraw(bytes journal, bytes seal) external;)
-    // và để alloy tự encode calldata chính xác.
-    let selector: [u8; 4] = [0xc0, 0x4b, 0x8d, 0x59]; // TODO(on-chain): placeholder – ĐỔI
-
-    let mut calldata = Vec::new();
-    calldata.extend_from_slice(&selector);
-
-    // ABI encode 2 dynamic bytes params
-    let journal_offset: U256 = U256::from(64);
-    let seal_offset: U256 = U256::from(64 + 32 + pad32(journal.len()));
-
-    calldata.extend_from_slice(&journal_offset.to_be_bytes::<32>());
-    calldata.extend_from_slice(&seal_offset.to_be_bytes::<32>());
-
-    // Journal bytes
-    calldata.extend_from_slice(&U256::from(journal.len()).to_be_bytes::<32>());
-    calldata.extend_from_slice(journal);
-    let pad_len = pad32(journal.len()) - journal.len();
-    calldata.extend(vec![0u8; pad_len]);
-
-    // Seal bytes
-    calldata.extend_from_slice(&U256::from(seal.len()).to_be_bytes::<32>());
-    calldata.extend_from_slice(seal);
-    let pad_len = pad32(seal.len()) - seal.len();
-    calldata.extend(vec![0u8; pad_len]);
-
-    Bytes::from(calldata)
-}
-
-fn pad32(len: usize) -> usize {
-    ((len + 31) / 32) * 32
+sol! {
+    interface IPrivacyVerifier {
+        function withdraw(
+            bytes calldata journal,
+            bytes calldata seal,
+            bytes32 nullifier,
+            address recipient
+        ) external;
+    }
 }

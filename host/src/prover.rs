@@ -50,9 +50,27 @@ pub fn verify_receipt(receipt: &Receipt) -> Result<()> {
 
 // ─── Decode TransactionOutput từ journal ─────────────────────
 
+use alloy::sol_types::{sol, SolType};
+
+sol! {
+    struct Journal {
+        bytes32 merkle_root;
+        bytes32 nullifier_hash;
+        address recipient;
+        uint256 amount;
+        bool is_valid;
+    }
+}
+
 pub fn extract_output(receipt: &Receipt) -> Result<TransactionOutput> {
-    receipt
-        .journal
-        .decode()
-        .context("Giải mã journal thất bại")
+    let bytes = receipt.journal.bytes.as_slice();
+    let decoded = Journal::abi_decode(bytes).context("Giải mã ABI journal thất bại")?;
+
+    Ok(TransactionOutput {
+        merkle_root: decoded.merkle_root.0,
+        nullifier_hash: decoded.nullifier_hash.0,
+        recipient: decoded.recipient.0.0,
+        amount: decoded.amount.try_into().unwrap_or(0),
+        is_valid: decoded.is_valid,
+    })
 }
