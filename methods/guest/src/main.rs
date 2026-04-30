@@ -126,7 +126,7 @@ fn compute_root_from_path(
     node
 }
 
-use alloy_primitives::{Address, FixedBytes, U256};
+use alloy_primitives::U256;
 use alloy_sol_types::{sol, SolType};
 
 sol! {

@@ -23,12 +23,6 @@ pub struct ChainSubmitResult {
 // ─── Submit proof lên Sepolia ─────────────────────────────────
 
 /// Gửi proof lên smart contract Sepolia.
-///
-/// TODO(on-chain): Cần cập nhật khi có contract thật:
-///   1. Thay `calldata` bằng ABI-encoded call từ contract ABI chính xác
-///      (dùng alloy sol! macro hoặc alloy::sol_types)
-///   2. Đường gọi: contract.withdraw(journal_bytes, seal_bytes, nullifier, recipient)
-///   3. Kiểm tra gas estimate trước khi gửi để tránh out-of-gas
 pub async fn submit_proof(
     receipt: &Receipt,
     output: &TransactionOutput,
@@ -50,32 +44,35 @@ pub async fn submit_proof(
 
     // Encode proof data thành calldata
     let journal_bytes = receipt.journal.bytes.clone();
-    
-    // Nén seal với Selector EVM chuẩn từ RISC Zero
+
+    // Lấy seal bytes từ Groth16 (hoặc fallback JSON nếu chưa nén)
     let seal_bytes = match receipt.inner.groth16() {
         Ok(groth16) => {
-            // Lấy 4 bytes đầu của verifier_parameters làm EVM selector
-            use risc0_zkvm::sha::Digestible;
+            // Selector 4-byte EVM từ verifier_parameters
             let selector = &groth16.verifier_parameters.as_bytes()[..4];
-            
             let mut encoded = Vec::with_capacity(selector.len() + groth16.seal.len());
             encoded.extend_from_slice(selector);
             encoded.extend_from_slice(groth16.seal.as_ref());
-            
-            println!("✅ Đã trích xuất chính xác Groth16 Seal (kèm EVM Selector, size: {} bytes).", encoded.len());
+            println!(
+                "✅ Groth16 Seal (kèm EVM Selector, {} bytes).",
+                encoded.len()
+            );
             encoded
-        },
+        }
         Err(_) => {
-            let json_bytes = serde_json::to_vec(&receipt.inner).context("Serialize receipt seal thất bại")?;
-            println!("⚠️ Chú ý: Bằng chứng KHÔNG phải Groth16. Đang gửi dưới dạng JSON (size: {} bytes). Điều này CÓ THỂ gây lỗi RPC Limit!!", json_bytes.len());
+            let json_bytes = serde_json::to_vec(&receipt.inner)
+                .context("Serialize receipt seal thất bại")?;
+            println!(
+                "⚠️  Proof KHÔNG phải Groth16 – gửi dạng JSON ({} bytes). \
+                 Contract sẽ từ chối nếu verifier yêu cầu Groth16!",
+                json_bytes.len()
+            );
             json_bytes
         }
     };
 
-
     let nullifier = output.nullifier_hash;
     let recipient = output.recipient;
-
     let recipient_addr: Address = recipient.into();
 
     let call = IPrivacyVerifier::withdrawCall {
@@ -121,13 +118,17 @@ pub async fn submit_proof(
     })
 }
 
-// ─── Query Deposit Events ───────────────────────────────────────
+// ─── Query Deposit Events (paginated) ──────────────────────────
 
 /// Query tất cả Deposit events từ contract để lấy danh sách commitments.
-/// Được dùng để rebuild Merkle tree on-chain.
+///
+/// Chia thành nhiều batch 40,000 blocks để tránh giới hạn của RPC provider
+/// (Alchemy free tier giới hạn 50,000 blocks mỗi eth_getLogs request).
 pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>> {
     use alloy::primitives::keccak256;
-    
+
+    const BATCH_SIZE: u64 = 40_000;
+
     let rpc_url = config
         .rpc_url
         .parse()
@@ -143,30 +144,79 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
     // Keccak256("Deposit(bytes32,uint256)") – event signature
     let deposit_event_sig = keccak256(b"Deposit(bytes32,uint256)");
 
-    // Query logs từ contract với event signature
-    // Alchemy free tier giới hạn dải block. 10620000 là block gần lúc deploy.
-    let filter = alloy::rpc::types::Filter::new()
-        .address(contract_addr)
-        .event_signature(deposit_event_sig)
-        .from_block(10620000);
-
-    let logs = provider
-        .get_logs(&filter)
+    // Lấy block mới nhất
+    let latest_block = provider
+        .get_block_number()
         .await
-        .context("Query Deposit events thất bại")?;
+        .context("Lấy block number mới nhất thất bại")?;
 
-    let mut commitments = Vec::new();
+    let from_block = config.deploy_block;
 
-    for log in logs {
-        let topics = log.topics();
-        if topics.len() >= 2 {
-            // topic[0] = event signature
-            // topic[1] = commitment (indexed param)
-            let commitment_fixed = topics[1];
-            let commitment: [u8; 32] = commitment_fixed.into();
-            commitments.push(commitment);
-        }
+    if from_block > latest_block {
+        anyhow::bail!(
+            "DEPLOY_BLOCK ({}) lớn hơn block hiện tại ({}). \
+             Kiểm tra lại giá trị DEPLOY_BLOCK trong .env",
+            from_block,
+            latest_block
+        );
     }
+
+    let total_blocks = latest_block - from_block + 1;
+    let num_batches = (total_blocks + BATCH_SIZE - 1) / BATCH_SIZE;
+    println!(
+        "   Quét {} blocks ({} → {}) trong {} batch...",
+        total_blocks, from_block, latest_block, num_batches
+    );
+
+    let mut commitments: Vec<[u8; 32]> = Vec::new();
+    let mut current = from_block;
+    let mut batch_num = 1u64;
+
+    while current <= latest_block {
+        let end = (current + BATCH_SIZE - 1).min(latest_block);
+
+        let filter = alloy::rpc::types::Filter::new()
+            .address(contract_addr)
+            .event_signature(deposit_event_sig)
+            .from_block(current)
+            .to_block(end);
+
+        let logs = provider
+            .get_logs(&filter)
+            .await
+            .with_context(|| {
+                format!(
+                    "Query Deposit events thất bại (batch {}/{}, blocks {}–{})",
+                    batch_num, num_batches, current, end
+                )
+            })?;
+
+        let count = logs.len();
+        if count > 0 {
+            println!(
+                "   Batch {}/{}: blocks {}–{} → {} event(s)",
+                batch_num, num_batches, current, end, count
+            );
+        }
+
+        for log in logs {
+            let topics = log.topics();
+            if topics.len() >= 2 {
+                // topic[0] = event signature (Deposit)
+                // topic[1] = commitment (indexed param)
+                let commitment: [u8; 32] = topics[1].into();
+                commitments.push(commitment);
+            }
+        }
+
+        current = end + 1;
+        batch_num += 1;
+    }
+
+    println!(
+        "   ✅ Tổng cộng {} commitment(s) từ contract.",
+        commitments.len()
+    );
 
     Ok(commitments)
 }
@@ -174,6 +224,7 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
 // ─── Kiểm tra balance ví trên Sepolia ─────────────────────────
 
 /// Kiểm tra balance ví trên Sepolia.
+#[allow(dead_code)]
 pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
     let signer: PrivateKeySigner = config
         .private_key
@@ -185,8 +236,7 @@ pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
         .parse()
         .context("Parse RPC URL thất bại")?;
 
-    let provider = ProviderBuilder::new()
-        .connect_http(rpc_url);
+    let provider = ProviderBuilder::new().connect_http(rpc_url);
 
     let balance = provider
         .get_balance(signer.address())

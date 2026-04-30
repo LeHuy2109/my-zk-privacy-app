@@ -6,3 +6,5 @@ target/
 out/
 cache/
 broadcast/
+.antigravityignore
+gen_secret.py

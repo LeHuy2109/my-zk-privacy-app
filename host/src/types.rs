@@ -38,15 +38,24 @@ pub struct ChainConfig {
     pub rpc_url: String,
     pub private_key: String,
     pub contract_address: String,
+    /// Block number mà contract được deploy, dùng để bắt đầu query Deposit events
+    pub deploy_block: u64,
 }
 
 impl ChainConfig {
     pub fn from_env() -> anyhow::Result<Self> {
+        // Block mà contract được deploy – dùng để bắt đầu paginate eth_getLogs
+        let deploy_block = std::env::var("DEPLOY_BLOCK")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(10625000); // fallback: block deploy contract trên Sepolia
+
         Ok(Self {
             rpc_url: std::env::var("SEPOLIA_RPC_URL")
                 .unwrap_or_else(|_| "https://rpc.sepolia.org".to_string()),
             private_key: std::env::var("PRIVATE_KEY").unwrap_or_default(),
             contract_address: std::env::var("CONTRACT_ADDRESS").unwrap_or_default(),
+            deploy_block,
         })
     }
 
