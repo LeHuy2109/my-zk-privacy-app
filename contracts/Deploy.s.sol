@@ -6,7 +6,16 @@ import "./PrivacyVerifier.sol";
 
 contract DeployScript is Script {
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        string memory privateKey = vm.envString("PRIVATE_KEY");
+        bytes memory privateKeyBytes = bytes(privateKey);
+        if (
+            privateKeyBytes.length < 2
+                || privateKeyBytes[0] != 0x30
+                || (privateKeyBytes[1] != 0x78 && privateKeyBytes[1] != 0x58)
+        ) {
+            privateKey = string.concat("0x", privateKey);
+        }
+        uint256 deployerPrivateKey = vm.parseUint(privateKey);
         vm.startBroadcast(deployerPrivateKey);
 
         // Official RISC Zero Verifier Router on Sepolia

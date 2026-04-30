@@ -1,6 +1,7 @@
 mod chain;
 mod display;
 mod executor;
+mod groth16_docker;
 mod prover;
 mod types;
 

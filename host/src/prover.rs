@@ -4,11 +4,21 @@ use risc0_zkvm::{default_prover, ProverOpts, Receipt};
 use std::time::Instant;
 
 use crate::executor;
+use crate::groth16_docker;
 use crate::types::{ProofResult, TransactionInput, TransactionOutput};
 
 // ─── Chạy toàn bộ pipeline: Executor → Prover → (Groth16) ───
 
 pub fn prove_transaction(input: &TransactionInput, groth16: bool) -> Result<ProofResult> {
+    if groth16 {
+        groth16_docker::prepare().with_context(|| {
+            format!(
+                "Groth16 Docker prover is not ready (image: {})",
+                groth16_docker::image_name()
+            )
+        })?;
+    }
+
     let env = executor::create_executor_env(input)?;
 
     let start = Instant::now();
@@ -26,7 +36,16 @@ pub fn prove_transaction(input: &TransactionInput, groth16: bool) -> Result<Proo
         println!("⏳ Đang nén STARK → Groth16 SNARK (local, cần ~16GB RAM)...\n");
         receipt = prover
             .compress(&ProverOpts::groth16(), &receipt)
-            .context("Nén Groth16 thất bại – kiểm tra RAM và Proving Key")?;
+            .with_context(|| {
+                format!(
+                    "Nen Groth16 that bai. Docker image: {}. RISC0_WORK_DIR: {}. \
+                     Neu Docker bao exit code 127, hay xoa image cu/hong roi chay lai: \
+                     docker image rm {}",
+                    groth16_docker::image_name(),
+                    std::env::var("RISC0_WORK_DIR").unwrap_or_else(|_| "<temp>".to_string()),
+                    groth16_docker::image_name()
+                )
+            })?;
     }
 
     let proving_time_ms = start.elapsed().as_millis();

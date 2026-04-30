@@ -18,7 +18,7 @@ contract PrivacyVerifier {
     uint256 constant TREE_DEPTH = 20;
 
     /// IMAGE_ID from RISC0 guest (update after building guest)
-    bytes32 constant IMAGE_ID = 0x787d8e7c1ef3e178d1fc98bc93b0693ad69dec8f34258aa43c3502bab057ff25;
+    bytes32 constant IMAGE_ID = 0x578a326cfc2ad27e41dd7aa7629f2097fcb6a04f6d3fc02d68fc6c1a49c8441e;
     
     // ─── State Variables ─────────────────────────────────────────────────
 
