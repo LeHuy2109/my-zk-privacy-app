@@ -8,3 +8,23 @@ methods = { path = "../methods" }
 risc0-zkvm = { version = "^3.0.5" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"
+anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }
+dotenv = "0.15"
+tokio = { version = "1", features = ["full"] }
+
+# Alloy v1 – dùng rustls (không cần libssl-dev)
+alloy = { version = "1", default-features = false, features = [
+    "provider-http",
+    "signer-local",
+    "network",
+    "rpc-types",
+    "consensus", "sol-types",
+    "reqwest-rustls-tls",
+] }
+alloy-sol-types = "1.5.7"
+alloy-primitives = "1.5.7"

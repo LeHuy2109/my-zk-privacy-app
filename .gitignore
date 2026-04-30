@@ -2,3 +2,9 @@
 Cargo.lock
 methods/guest/Cargo.lock
 target/
+*.env
+out/
+cache/
+broadcast/
+.antigravityignore
+gen_secret.py

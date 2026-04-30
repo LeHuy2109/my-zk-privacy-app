@@ -1,132 +1,162 @@
-// ============================================================
-// RISC0 Host Program: ZK Privacy Transaction Demo
-//
-// Host gửi TransactionInput (private) vào guest,
-// nhận proof và đọc TransactionOutput (public) từ journal.
-// ============================================================
+mod chain;
+mod display;
+mod executor;
+mod groth16_docker;
+mod prover;
+mod types;
 
-use methods::{METHOD_ELF, METHOD_ID};
-use risc0_zkvm::{default_prover, ExecutorEnv};
-use serde::{Deserialize, Serialize};
+use anyhow::{Result, Context};
+use clap::Parser;
 
-// -------------------------------------------------------
-// Phải định nghĩa lại cùng struct với guest để serialize/deserialize
-// (Trong dự án thực tế, nên dùng một crate shared chung)
-// -------------------------------------------------------
-#[derive(Serialize, Deserialize)]
-pub struct TransactionInput {
-    pub sender_address: [u8; 20],
-    pub receiver_address: [u8; 20],
-    pub amount: u64,
-    pub sender_balance: u64,
-    pub nonce: [u8; 32],
+use types::ChainConfig;
+
+// ─── CLI Arguments ───────────────────────────────────────────
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "zk-privacy-host",
+    about = "🔐 ZK Privacy – Merkle Inclusion Proof + Nullifier (RISC Zero + Sepolia)"
+)]
+struct Cli {
+    /// Số tiền giao dịch (mặc định: 500)
+    #[arg(long, default_value_t = 500)]
+    amount: u64,
+
+    /// Địa chỉ người nhận (hex 20-byte, bỏ trống để dùng demo address)
+    #[arg(long)]
+    recipient: Option<String>,
+
+    /// Secret (Bí mật) người dùng sinh ra lúc deposit (Bắt buộc khi chạy --chain)
+    #[arg(long)]
+    secret: Option<String>,
+
+    /// Gửi proof lên Sepolia testnet
+    #[arg(long, default_value_t = false)]
+    chain: bool,
+
+    /// Nén proof sang Groth16 SNARK local (yêu cầu RAM ~16GB+)
+    #[arg(long, default_value_t = false)]
+    groth16: bool,
+
+    /// Công cụ tính Commitment để nạp tiền (Deposit)
+    #[arg(long, default_value_t = false)]
+    deposit: bool,
+
+    /// Xuất kết quả dạng JSON
+    #[arg(long, default_value_t = false)]
+    json: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransactionOutput {
-    pub sender_commitment: [u8; 32],
-    pub receiver_commitment: [u8; 32],
-    pub amount_commitment: [u8; 32],
-    pub is_valid: bool,
-}
+// ─── Main ────────────────────────────────────────────────────
 
-fn main() {
-    // Khởi tạo logging (RUST_LOG=info cargo run để xem log)
+#[tokio::main]
+async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::filter::EnvFilter::from_default_env())
         .init();
 
-    // -------------------------------------------------------
-    // Tạo dữ liệu giao dịch riêng tư (chỉ host & guest biết)
-    // Trong ứng dụng thực tế, các giá trị này đến từ ví/người dùng
-    // -------------------------------------------------------
-    let tx_input = TransactionInput {
-        // Địa chỉ người gửi: 0xABCD...1234 (20 bytes)
-        sender_address: [
-            0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89,
-            0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89,
-            0xAB, 0xCD, 0x12, 0x34,
-        ],
-        // Địa chỉ người nhận: 0x1122...AABB (20 bytes)
-        receiver_address: [
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-            0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00,
-            0x11, 0x22, 0xAA, 0xBB,
-        ],
-        // Số tiền: 500 đơn vị token
-        amount: 500,
-        // Số dư người gửi: 1000 đơn vị token (đủ để giao dịch)
-        sender_balance: 1000,
-        // Nonce ngẫu nhiên 32 bytes (chống replay attack)
-        nonce: [
-            0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE,
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-            0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        ],
+    let _ = dotenv::dotenv();
+    let cli = Cli::parse();
+    
+    // ── 1. Banner ────────────────────────────────────────────
+    if !cli.json {
+        display::print_banner();
+    }
+
+    if cli.deposit {
+        let secret_hex = cli.secret.as_deref().context("Cần truyền --secret khi chạy --deposit")?;
+        let cleaned = secret_hex.strip_prefix("0x").unwrap_or(secret_hex);
+        let secret_bytes = hex::decode(cleaned).context("Lỗi decode hex secret")?;
+        anyhow::ensure!(secret_bytes.len() == 32, "Secret phải là 32 bytes hex");
+        
+        let mut s = [0u8; 32];
+        s.copy_from_slice(&secret_bytes);
+        
+        let commitment = executor::compute_leaf(&s, cli.amount);
+        
+        println!("🚀 TÍNH TOÁN LỆNH DEPOSIT (NẠP TIỀN)");
+        println!("────────────────────────────────────────────────────────────");
+        println!("🔑 Secret Input : {}", secret_hex);
+        println!("💰 Lượng (Amount): {}", cli.amount);
+        println!("🔒 Commitment   : 0x{}", alloy::hex::encode(commitment));
+        println!("────────────────────────────────────────────────────────────");
+        println!("💡 HƯỚNG DẪN:");
+        println!("1. Dùng ví có tiền mạng Sepolia.");
+        println!("2. Gọi thử qua giao diện Remix, hoặc Cast:");
+        println!("   cast send <CONTRACT_ADDRESS> \"deposit(bytes32)\" 0x{} --value {} --rpc-url <YOUR_RPC_URL> --private-key <YOUR_PK>", 
+            alloy::hex::encode(commitment), cli.amount);
+        
+        return Ok(());
+    }
+
+    // ── 2. Build TransactionInput (Hỗ trợ On-chain hoặc Offline) ──
+    let input = if cli.chain {
+        let config = ChainConfig::from_env()?;
+        if !config.is_configured() {
+            anyhow::bail!("Thiếu cấu hình Sepolia (.env). Vui lòng cấu hình hợp lệ khi sử dụng --chain");
+        }
+        let secret = cli.secret.as_deref().context("Cần truyền --secret khi chạy --chain")?;
+        let recipient = cli.recipient.as_deref().context("Cần truyền --recipient khi chạy --chain")?;
+        
+        println!("⏳ Đang tải dữ liệu Merkle Tree từ Smart Contract (Sepolia)...");
+        executor::build_custom_input_on_chain(secret, cli.amount, recipient, &config).await?
+    } else {
+        match &cli.recipient {
+            // Khi chạy demo off-chain
+            Some(recipient) => {
+                executor::build_custom_input(
+                    recipient, 
+                    cli.amount, 
+                    cli.secret.as_deref()
+                )?
+            },
+            None => executor::build_demo_input(cli.amount),
+        }
     };
 
-    println!("=== ZK Privacy Transaction Demo ===");
-    println!("[HOST] Gửi giao dịch vào ZK prover (dữ liệu được giữ bí mật)...");
-    println!("[HOST] Số tiền: {} token", tx_input.amount);
-    println!("[HOST] Số dư gửi: {} token", tx_input.sender_balance);
+    if !cli.json {
+        display::print_input_summary(&input);
+    }
 
-    // -------------------------------------------------------
-    // Tạo ExecutorEnv và ghi private input vào
-    // -------------------------------------------------------
-    let env = ExecutorEnv::builder()
-        .write(&tx_input)
-        .unwrap()
-        .build()
-        .unwrap();
+    // ── 3. Executor + Prover: tạo ZK proof ──────────────────
+    if !cli.json {
+        println!("⏳ Đang chạy Executor & Prover (tạo ZK proof)...\n");
+    }
 
-    // Lấy prover mặc định (mock prover khi dev, BonsaiProver khi production)
-    let prover = default_prover();
+    let result = prover::prove_transaction(&input, cli.groth16)?;
 
-    println!("[HOST] Đang tạo ZK proof...");
-    let prove_info = prover
-        .prove(env, METHOD_ELF)
-        .expect("Tạo proof thất bại");
+    if cli.json {
+        display::print_json(&input, &result.output, result.proving_time_ms);
+        return Ok(());
+    }
 
-    let receipt = prove_info.receipt;
+    display::print_proof_result(&result);
 
-    // -------------------------------------------------------
-    // Đọc public output từ journal
-    // Journal chứa các commitment hash – KHÔNG có thông tin thật
-    // -------------------------------------------------------
-    let output: TransactionOutput = receipt
-        .journal
-        .decode()
-        .expect("Giải mã journal thất bại");
+    // ── 4. Verify locally ────────────────────────────────────
+    prover::verify_receipt(&result.receipt)?;
+    display::print_verification_success();
 
-    println!("\n=== KẾT QUẢ PUBLIC (Journal) ===");
-    println!("[PUBLIC] Giao dịch hợp lệ: {}", output.is_valid);
-    println!(
-        "[PUBLIC] Commitment người gửi:  {}",
-        hex_encode(&output.sender_commitment)
-    );
-    println!(
-        "[PUBLIC] Commitment người nhận: {}",
-        hex_encode(&output.receiver_commitment)
-    );
-    println!(
-        "[PUBLIC] Commitment số tiền:    {}",
-        hex_encode(&output.amount_commitment)
-    );
-    println!("\n[Lưu ý] Địa chỉ thật và số tiền thật KHÔNG xuất hiện ở trên.");
+    // ── 5. Submit to Sepolia (nếu --chain) ───────────────────
+    if cli.chain {
+        let config = ChainConfig::from_env()?;
+        if !config.is_configured() {
+            display::print_chain_skipped();
+        } else {
+            println!("⏳ Đang gửi proof lên Sepolia testnet...\n");
+            let chain_result = chain::submit_proof(&result.receipt, &result.output, &config).await?;
+            display::print_chain_result(
+                chain_result.tx_hash.as_ref(),
+                chain_result.block_number,
+                chain_result.gas_used,
+                &chain_result.explorer_url,
+            );
+        }
+    } else {
+        display::print_chain_skipped();
+    }
 
-    // -------------------------------------------------------
-    // Xác minh proof (bên thứ 3 / blockchain có thể làm điều này)
-    // -------------------------------------------------------
-    receipt
-        .verify(METHOD_ID)
-        .expect("Xác minh proof thất bại");
+    // ── 6. Summary ───────────────────────────────────────────
+    display::print_summary();
 
-    println!("\n[VERIFIER] ✓ ZK Proof hợp lệ! Giao dịch được chấp nhận.");
-    println!("[VERIFIER] Blockchain ghi nhận commitment, không biết sender/receiver/amount thật.");
-}
-
-/// Chuyển byte array thành chuỗi hex để hiển thị
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    Ok(())
 }
