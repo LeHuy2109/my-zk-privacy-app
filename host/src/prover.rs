@@ -33,7 +33,7 @@ pub fn prove_transaction(input: &TransactionInput, groth16: bool) -> Result<Proo
 
     // ── Bước 2 (tuỳ chọn): Nén STARK → Groth16 SNARK ────────
     if groth16 {
-        println!("⏳ Đang nén STARK → Groth16 SNARK (local, cần ~16GB RAM)...\n");
+        println!("Nén STARK thành Groth16 SNARK (cần ít nhất 16GB RAM)\n");
         receipt = prover
             .compress(&ProverOpts::groth16(), &receipt)
             .with_context(|| {
@@ -63,7 +63,7 @@ pub fn prove_transaction(input: &TransactionInput, groth16: bool) -> Result<Proo
 pub fn verify_receipt(receipt: &Receipt) -> Result<()> {
     receipt
         .verify(METHOD_ID)
-        .context("Xác minh ZK proof thất bại – proof không hợp lệ")?;
+        .context("Xác minh ZK proof thất bại - proof không hợp lệ")?;
     Ok(())
 }
 

@@ -16,7 +16,7 @@ use types::ChainConfig;
 #[derive(Parser, Debug)]
 #[command(
     name = "zk-privacy-host",
-    about = "🔐 ZK Privacy – Merkle Inclusion Proof + Nullifier (RISC Zero + Sepolia)"
+    about = "ZK Privacy - Merkle Inclusion Proof + Nullifier (RISC Zero + Sepolia)"
 )]
 struct Cli {
     /// Số tiền giao dịch (mặc định: 500)
@@ -105,15 +105,11 @@ async fn main() -> Result<()> {
         
         let commitment = executor::compute_leaf(&s, cli.amount);
         
-        println!("TÍNH TOÁN LỆNH DEPOSIT (NẠP TIỀN)");
-        println!("────────────────────────────────────────────────────────────");
-        println!("Secret Input : {}", secret_hex);
-        println!("Lượng (Amount): {}", cli.amount);
-        println!("Commitment   : 0x{}", alloy::hex::encode(commitment));
-        println!("────────────────────────────────────────────────────────────");
-        println!("HƯỚNG DẪN:");
-        println!("1. Dùng ví có tiền mạng Sepolia.");
-        println!("2. Gọi thử qua giao diện Remix, hoặc Cast:");
+        println!("TÍNH TOÁN LỆNH DEPOSIT:");
+        println!("Secret Input: {}", secret_hex);
+        println!("Amount      : {}", cli.amount);
+        println!("Commitment  : 0x{}", alloy::hex::encode(commitment));
+        println!("Chạy lệnh:");
         
         // Try to load config from .env and fill in the actual values
         match ChainConfig::from_env() {
@@ -150,7 +146,7 @@ async fn main() -> Result<()> {
         let recipient = cli.recipient.as_deref().context("Cần truyền --recipient khi chạy --generate-proof")?;
 
         let input = if let Some(config) = &config {
-            println!("Đang tải dữ liệu Merkle Tree từ Smart Contract (Sepolia)...");
+            println!("Đang tải dữ liệu Merkle Tree từ Sepolia");
             executor::build_custom_input_on_chain(secret, cli.amount, recipient, config).await?
         } else {
             executor::build_custom_input(recipient, cli.amount, Some(secret))?
@@ -160,7 +156,7 @@ async fn main() -> Result<()> {
             display::print_input_summary(&input);
         }
 
-        println!("⏳ Đang chạy Executor & Prover (tạo ZK proof)...\n");
+        println!("Đang chạy Executor & Prover\n");
         let result = prover::prove_transaction(&input, cli.groth16)?;
 
         if cli.json {
@@ -193,7 +189,7 @@ async fn main() -> Result<()> {
         prover::verify_receipt(&result.receipt)?;
         display::print_verification_success();
 
-        println!("Đang gửi proof lên Sepolia testnet...\n");
+        println!("Đang gửi proof lên Sepolia\n");
         let chain_result = chain::submit_proof(&result.receipt, &result.output, &config).await?;
         display::print_chain_result(
             chain_result.tx_hash.as_ref(),
@@ -214,7 +210,7 @@ async fn main() -> Result<()> {
         let secret = cli.secret.as_deref().context("Cần truyền --secret khi chạy --chain")?;
         let recipient = cli.recipient.as_deref().context("Cần truyền --recipient khi chạy --chain")?;
         
-        println!("⏳ Đang tải dữ liệu Merkle Tree từ Smart Contract (Sepolia)...");
+        println!("Đang tải dữ liệu Merkle Tree từ Sepolia");
         executor::build_custom_input_on_chain(secret, cli.amount, recipient, &config).await?
     } else {
         match &cli.recipient {
@@ -236,7 +232,7 @@ async fn main() -> Result<()> {
 
     // ── 3. Executor + Prover: tạo ZK proof ──────────────────
     if !cli.json {
-        println!("Đang chạy Executor & Prover (tạo ZK proof)...\n");
+        println!("Đang chạy Executor & Prover\n");
     }
 
     let result = prover::prove_transaction(&input, cli.groth16)?;
@@ -258,7 +254,7 @@ async fn main() -> Result<()> {
         if !config.is_configured() {
             display::print_chain_skipped();
         } else {
-            println!("Đang gửi proof lên Sepolia testnet...\n");
+            println!("Đang gửi proof lên Sepolia testnet\n");
             let chain_result = chain::submit_proof(&result.receipt, &result.output, &config).await?;
             display::print_chain_result(
                 chain_result.tx_hash.as_ref(),
