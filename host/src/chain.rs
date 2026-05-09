@@ -54,7 +54,7 @@ pub async fn submit_proof(
             encoded.extend_from_slice(selector);
             encoded.extend_from_slice(groth16.seal.as_ref());
             println!(
-                "✅ Groth16 Seal (kèm EVM Selector, {} bytes).",
+                "Groth16 Seal (kèm EVM Selector, {} bytes).",
                 encoded.len()
             );
             encoded
@@ -63,7 +63,7 @@ pub async fn submit_proof(
             let json_bytes = serde_json::to_vec(&receipt.inner)
                 .context("Serialize receipt seal thất bại")?;
             println!(
-                "⚠️  Proof KHÔNG phải Groth16 – gửi dạng JSON ({} bytes). \
+                "Proof KHÔNG phải Groth16 - gửi dạng JSON ({} bytes). \
                  Contract sẽ từ chối nếu verifier yêu cầu Groth16!",
                 json_bytes.len()
             );
@@ -186,7 +186,7 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
             .await
             .with_context(|| {
                 format!(
-                    "Query Deposit events thất bại (batch {}/{}, blocks {}–{})",
+                    "Query Deposit events thất bại (batch {}/{}, blocks {}-{})",
                     batch_num, num_batches, current, end
                 )
             })?;
@@ -214,7 +214,7 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
     }
 
     println!(
-        "   ✅ Tổng cộng {} commitment(s) từ contract.",
+        "Tổng cộng {} commitment(s) từ contract.",
         commitments.len()
     );
 

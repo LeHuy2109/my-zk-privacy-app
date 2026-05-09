@@ -25,6 +25,7 @@ pub struct TransactionOutput {
 
 // ─── Kết quả sau khi Executor + Prover hoàn tất ──────────────
 
+#[derive(Serialize, Deserialize)]
 pub struct ProofResult {
     pub receipt: risc0_zkvm::Receipt,
     pub output: TransactionOutput,
