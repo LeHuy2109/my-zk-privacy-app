@@ -1,0 +1,2 @@
+[env]
+RISC0_USE_DOCKER = "1"
