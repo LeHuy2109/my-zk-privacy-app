@@ -92,6 +92,12 @@ async fn main() -> Result<()> {
     // ── 1. Banner ────────────────────────────────────────────
     if !cli.json {
         display::print_banner();
+        
+        let mut id_bytes = [0u8; 32];
+        for (i, word) in methods::METHOD_ID.iter().enumerate() {
+            id_bytes[i*4..(i+1)*4].copy_from_slice(&word.to_le_bytes());
+        }
+        println!("🔑 IMAGE_ID (đang build): 0x{}\n", alloy::hex::encode(id_bytes));
     }
 
     if cli.deposit {
