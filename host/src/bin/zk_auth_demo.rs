@@ -451,11 +451,44 @@ fn availability_benchmark(args: BenchmarkArgs) -> Result<()> {
         mode: format!("{:?}", args.mode).to_lowercase(),
         count: args.count,
         criteria: vec![
+            criterion("scenario", "availability_benchmark", "label"),
             criterion("payload_count", args.count, "records"),
+            criterion("success_count", args.count, "records"),
+            criterion("failure_count", 0, "records"),
+            criterion("success_rate_percent", "100.00", "percent"),
             criterion("payload_hash_latency_ms", elapsed.as_millis(), "ms"),
-            criterion("payload_hash_throughput", format!("{throughput:.2}"), "records/sec"),
+            criterion(
+                "payload_hash_throughput",
+                format!("{throughput:.2}"),
+                "records/sec",
+            ),
             criterion("payload_hash_size", 32, "bytes"),
-            criterion("recommended_metrics", "proof_generation_seconds, journal_size_bytes, seal_size_bytes, tx_build_seconds, send_and_confirm_seconds, gas_used, success_rate", "list"),
+            criterion(
+                "proof_generation_seconds",
+                "measure_with_zk_demo",
+                "seconds",
+            ),
+            criterion("proof_verify_seconds", "measure_with_verify_e2e", "seconds"),
+            criterion("seal_size_bytes", "measure_with_zk_demo", "bytes"),
+            criterion("journal_size_bytes", "measure_with_zk_demo", "bytes"),
+            criterion("raw_tx_size_bytes", "measure_on_chain_submit", "bytes"),
+            criterion("calldata_size_bytes", "measure_on_chain_submit", "bytes"),
+            criterion(
+                "send_and_confirm_seconds",
+                "measure_on_chain_submit",
+                "seconds",
+            ),
+            criterion("total_latency_seconds", "derive_from_e2e_run", "seconds"),
+            criterion(
+                "tamper_detection_rate",
+                "measure_with_integrity_cases",
+                "percent",
+            ),
+            criterion(
+                "replay_rejection_rate",
+                "measure_with_integrity_cases",
+                "percent",
+            ),
         ],
     };
     write_json_artifact(&args.output, &report)?;

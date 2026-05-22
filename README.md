@@ -265,6 +265,43 @@ cargo run --bin zk_auth_demo -- submit-zk \
 
 Để submit on-chain, proof nên được tạo với `--groth16` vì verifier router Ethereum cần seal EVM-compatible.
 
+### Kịch bản đánh giá giống project PQC
+
+Demo ZK-auth dùng kịch bản chính: **ZK-STARK Authentication Layer for Blockchain Record**.
+
+```text
+payload -> payloadHash -> secret/identityCommitment -> ZK proof -> smart contract verify -> store record
+```
+
+ECDSA vẫn tồn tại ở tầng gửi transaction Ethereum, nhưng không còn là cơ chế xác thực nghiệp vụ. Contract chỉ chấp nhận ghi record khi proof hợp lệ.
+
+Năm kịch bản so sánh:
+
+| Kịch bản | Mục tiêu | Script |
+|---|---|---|
+| Traditional ECDSA baseline | Mốc gas/latency thấp nhất khi chỉ ghi `payloadHash` | `script/traditional_demo.py` |
+| ZK-STARK auth | Tạo proof và ghi record bằng `storeRecordWithProof` | `script/zk_demo.py` |
+| ZK + off-chain proof storage | Lưu artifact/journal/proof ngoài chuỗi, on-chain lưu hash/CID | `script/zk_demo.py`, `script/verify_e2e.py` |
+| Integrity test | Tamper payload/journal/proof, replay nullifier, sai chain/contract | `script/integrity_cases.py` |
+| Availability benchmark | Chạy nhiều record để đo success rate/latency/throughput | `script/availability_benchmark.py` |
+
+Bộ metric chính để đưa vào báo cáo:
+
+```text
+gas_used
+proof_generation_seconds
+proof_verify_seconds
+seal_size_bytes
+journal_size_bytes
+raw_tx_size_bytes
+calldata_size_bytes
+send_and_confirm_seconds
+total_latency_seconds
+success_rate_percent
+tamper_detection_rate
+replay_rejection_rate
+```
+
 ### Bộ script giống project PQC
 
 Các script trong `script/` là wrapper mỏng gọi Rust binary `zk_auth_demo`, để giữ tên file giống project PQC nhưng không nhân đôi logic:
