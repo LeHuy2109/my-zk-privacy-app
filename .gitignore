@@ -8,3 +8,4 @@ cache/
 broadcast/
 .antigravityignore
 gen_secret.py
+.zkprivacy-notes.json
