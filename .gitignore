@@ -6,3 +6,4 @@ cache/
 broadcast/
 .antigravityignore
 gen_secret.py
+results/
