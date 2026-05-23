@@ -10,22 +10,21 @@ mod prover;
 mod types;
 #[path = "../zkprivacy_chain.rs"]
 mod zkprivacy_chain;
-#[path = "../zkprivacy_cli.rs"]
-mod zkprivacy_cli;
-#[path = "../zkprivacy_commands.rs"]
-mod zkprivacy_commands;
-#[path = "../zkprivacy_config.rs"]
-mod zkprivacy_config;
-#[path = "../zkprivacy_notes.rs"]
-mod zkprivacy_notes;
 #[path = "../zkprivacy_relayer.rs"]
 mod zkprivacy_relayer;
-#[path = "../zkprivacy_utils.rs"]
-mod zkprivacy_utils;
 
 use anyhow::Result;
 use clap::Parser;
-use zkprivacy_cli::Cli;
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "zkprivacy-relayer",
+    about = "HTTP relayer for zkprivacy withdraw proofs"
+)]
+struct Cli {
+    #[arg(long, default_value = "127.0.0.1:8787")]
+    bind: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,5 +33,6 @@ async fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::filter::EnvFilter::from_default_env())
         .init();
 
-    zkprivacy_commands::run(Cli::parse()).await
+    let cli = Cli::parse();
+    zkprivacy_relayer::serve(&cli.bind).await
 }

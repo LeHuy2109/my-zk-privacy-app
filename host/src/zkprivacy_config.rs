@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub private_key: Option<String>,
     pub contract_address: Option<String>,
     pub deploy_block: Option<u64>,
+    pub relayer_url: Option<String>,
     pub network: String,
 }
 
@@ -23,6 +24,7 @@ impl AppConfig {
             deploy_block: std::env::var("DEPLOY_BLOCK")
                 .ok()
                 .and_then(|v| v.parse().ok()),
+            relayer_url: std::env::var("RELAYER_URL").ok(),
             network: "sepolia".to_string(),
         })
     }
@@ -55,13 +57,30 @@ impl AppConfig {
             deploy_block: self.deploy_block.unwrap_or(0),
         })
     }
+
+    pub fn require_public_chain(&self) -> Result<crate::types::ChainConfig> {
+        let rpc_url = self
+            .rpc_url
+            .clone()
+            .context("Missing SEPOLIA_RPC_URL. Run `zkprivacy config set --rpc-url <url>`.")?;
+        let contract_address = self.contract_address.clone().context(
+            "Missing CONTRACT_ADDRESS. Run `zkprivacy config set --contract <address>`.",
+        )?;
+        Ok(crate::types::ChainConfig {
+            rpc_url,
+            private_key: String::new(),
+            contract_address,
+            deploy_block: self.deploy_block.unwrap_or(0),
+        })
+    }
 }
 
 pub fn init_env() -> Result<bool> {
     if Path::new(ENV_PATH).exists() {
         return Ok(false);
     }
-    let template = "SEPOLIA_RPC_URL=\nPRIVATE_KEY=\nCONTRACT_ADDRESS=\nDEPLOY_BLOCK=0\n";
+    let template =
+        "SEPOLIA_RPC_URL=\nPRIVATE_KEY=\nCONTRACT_ADDRESS=\nDEPLOY_BLOCK=0\nRELAYER_URL=http://127.0.0.1:8787/withdraw\n";
     fs::write(ENV_PATH, template).context("Failed to create .env")?;
     Ok(true)
 }
@@ -71,6 +90,7 @@ pub fn update_env(
     private_key: Option<String>,
     contract: Option<String>,
     deploy_block: Option<u64>,
+    relayer_url: Option<String>,
 ) -> Result<()> {
     let mut values = read_env_file()?;
     if let Some(v) = rpc_url {
@@ -84,6 +104,9 @@ pub fn update_env(
     }
     if let Some(v) = deploy_block {
         values.insert("DEPLOY_BLOCK".to_string(), v.to_string());
+    }
+    if let Some(v) = relayer_url {
+        values.insert("RELAYER_URL".to_string(), v);
     }
     write_env_file(&values)
 }

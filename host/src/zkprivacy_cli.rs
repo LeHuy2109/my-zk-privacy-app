@@ -71,6 +71,8 @@ pub struct ConfigSetArgs {
     pub contract: Option<String>,
     #[arg(long)]
     pub deploy_block: Option<u64>,
+    #[arg(long)]
+    pub relayer_url: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -134,6 +136,10 @@ pub struct WithdrawArgs {
     pub recipient: Option<String>,
     #[arg(long, default_value_t = false)]
     pub groth16: bool,
+    #[arg(long, default_value_t = false)]
+    pub relayer: bool,
+    #[arg(long)]
+    pub relayer_url: Option<String>,
     #[arg(long, default_value = "proof.json")]
     pub output: PathBuf,
 }
