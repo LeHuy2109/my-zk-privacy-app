@@ -138,6 +138,8 @@ zkprivacy prove --note <note-id> --recipient <address> --output proof.json --gro
 zkprivacy prove --amount <amount> --secret <secret> --recipient <address> --output proof.json
 zkprivacy withdraw --proof proof.json
 zkprivacy withdraw --note <note-id> --recipient <address> --groth16
+zkprivacy withdraw --proof proof.json --relayer
+zkprivacy withdraw --note <note-id> --recipient <address> --groth16 --relayer
 zkprivacy status
 zkprivacy balance
 zkprivacy nullifier check <nullifier>
@@ -184,6 +186,37 @@ cargo run --bin zkprivacy -- withdraw \
   --note <note-id> \
   --recipient <recipient-address> \
   --groth16
+```
+
+### Withdraw qua relayer cố định
+
+Để tránh lộ ví người rút qua phí gas, deploy biến thể contract `PrivacyVerifierFixedGasPayer`. Biến thể này vẫn cho mọi ví gọi `deposit`, nhưng chỉ cho relayer hard-code gọi `withdraw`.
+
+Relayer server là nơi duy nhất giữ private key ví relayer:
+
+```bash
+RELAYER_PRIVATE_KEY=<relayer-private-key> \
+SEPOLIA_RPC_URL=<sepolia-rpc-url> \
+CONTRACT_ADDRESS=<privacy-contract-address> \
+cargo run --bin zkprivacy_relayer -- --bind 127.0.0.1:8787
+```
+
+Máy user không cần private key relayer. User chỉ cần tạo proof local rồi gửi proof tới relayer:
+
+```bash
+cargo run --bin zkprivacy -- config set --relayer-url http://127.0.0.1:8787/withdraw
+cargo run --bin zkprivacy -- prove --note <note-id> --recipient <recipient-address> --output proof.json --groth16
+cargo run --bin zkprivacy -- withdraw --proof proof.json --relayer
+```
+
+Luồng gộp một bước:
+
+```bash
+cargo run --bin zkprivacy -- withdraw \
+  --note <note-id> \
+  --recipient <recipient-address> \
+  --groth16 \
+  --relayer
 ```
 
 ### Bảo mật note

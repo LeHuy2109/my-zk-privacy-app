@@ -7,7 +7,7 @@ use crate::{
     zkprivacy_cli::*,
     zkprivacy_config::{self, AppConfig},
     zkprivacy_notes::{self, Note, NoteStore},
-    zkprivacy_utils as utils,
+    zkprivacy_relayer, zkprivacy_utils as utils,
 };
 
 pub struct GlobalOptions {
@@ -70,6 +70,7 @@ fn config_show(opts: &GlobalOptions) -> Result<()> {
                 "private_key": zkprivacy_config::masked(&config.private_key),
                 "contract_address": config.contract_address,
                 "deploy_block": config.deploy_block,
+                "relayer_url": config.relayer_url,
                 "network": config.network,
                 "chain_ready": config.is_chain_ready(),
             }))?
@@ -97,6 +98,12 @@ fn config_show(opts: &GlobalOptions) -> Result<()> {
                 .map(|v| v.to_string())
                 .unwrap_or_else(|| "<missing>".to_string())
         );
+        println!(
+            "  Relayer URL    : {}",
+            config
+                .relayer_url
+                .unwrap_or_else(|| "<missing>".to_string())
+        );
         println!("  Network        : {}", config.network);
     }
     Ok(())
@@ -115,6 +122,7 @@ fn config_set(args: ConfigSetArgs, opts: &GlobalOptions) -> Result<()> {
         args.private_key,
         args.contract,
         args.deploy_block,
+        args.relayer_url,
     )?;
     println!("Config updated. PRIVATE_KEY was not printed.");
     Ok(())
@@ -283,7 +291,12 @@ async fn withdraw(args: WithdrawArgs, opts: &GlobalOptions) -> Result<()> {
         args.output
     };
 
-    let config = AppConfig::load()?.require_chain()?;
+    let app_config = AppConfig::load()?;
+    let config = if args.relayer {
+        app_config.require_public_chain()?
+    } else {
+        app_config.require_chain()?
+    };
     let json = fs::read_to_string(&proof_path)
         .with_context(|| format!("Proof file not found: {}", proof_path.display()))?;
     let result: crate::types::ProofResult =
@@ -296,6 +309,31 @@ async fn withdraw(args: WithdrawArgs, opts: &GlobalOptions) -> Result<()> {
 
     if opts.dry_run {
         println!("Dry run: proof verified and nullifier is unused; transaction not sent.");
+        return Ok(());
+    }
+
+    if args.relayer {
+        step(opts, "[2/3] Sending proof to relayer");
+        let relayer_url = args
+            .relayer_url
+            .or(app_config.relayer_url)
+            .context("Missing RELAYER_URL. Run `zkprivacy config set --relayer-url http://127.0.0.1:8787/withdraw`.")?;
+        let relayer_result =
+            zkprivacy_relayer::submit_proof_to_relayer(&relayer_url, &json).await?;
+        step(opts, "[3/3] Relayer confirmed");
+        println!(
+            "Withdraw tx: {}",
+            relayer_result
+                .tx_hash
+                .as_deref()
+                .unwrap_or("<missing tx hash>")
+        );
+        if let Some(gas) = relayer_result.gas_used {
+            println!("Gas used   : {}", gas);
+        }
+        if let Some(explorer_url) = relayer_result.explorer_url {
+            println!("Explorer   : {}", explorer_url);
+        }
         return Ok(());
     }
 
@@ -339,7 +377,7 @@ async fn generate_proof(
     opts: &GlobalOptions,
 ) -> Result<()> {
     step(opts, "[1/4] Loading config");
-    let config = AppConfig::load()?.require_chain()?;
+    let config = AppConfig::load()?.require_public_chain()?;
     step(opts, "[2/4] Building Merkle input from chain");
     let input = executor::build_custom_input_on_chain(secret, amount, recipient, &config).await?;
     step(opts, "[3/4] Running RISC Zero prover");
@@ -362,7 +400,7 @@ fn status(opts: &GlobalOptions) -> Result<()> {
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
-                "chain_ready": config.is_chain_ready(), "notes": store.notes.len(), "notes_path": zkprivacy_notes::notes_path(), "network": config.network
+                "chain_ready": config.is_chain_ready(), "relayer_url": config.relayer_url, "notes": store.notes.len(), "notes_path": zkprivacy_notes::notes_path(), "network": config.network
             }))?
         );
     } else {
