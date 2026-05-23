@@ -88,7 +88,7 @@ pub fn extract_output(receipt: &Receipt) -> Result<TransactionOutput> {
     Ok(TransactionOutput {
         merkle_root: decoded.merkle_root.0,
         nullifier_hash: decoded.nullifier_hash.0,
-        recipient: decoded.recipient.0.0,
+        recipient: decoded.recipient.0 .0,
         amount: decoded.amount.try_into().unwrap_or(0),
         is_valid: decoded.is_valid,
     })

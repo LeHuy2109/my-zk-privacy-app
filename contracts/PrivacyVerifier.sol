@@ -10,7 +10,7 @@ import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
  */
 contract PrivacyVerifier {
     // ─── Constants ──────────────────────────────────────────────────────
-    
+
     /// RISC Zero Verifier instance
     IRiscZeroVerifier public immutable verifier;
 
@@ -19,7 +19,7 @@ contract PrivacyVerifier {
 
     /// IMAGE_ID from RISC0 guest (update after building guest)
     bytes32 constant IMAGE_ID = 0x758d2389d7d3d0e7915b0b2e81da7ac102c78d36a7c8611f59b493e58b0f1098;
-    
+
     // ─── State Variables ─────────────────────────────────────────────────
 
     /// Current Merkle root
@@ -71,7 +71,7 @@ contract PrivacyVerifier {
      */
     function deposit(bytes32 commitment) external payable {
         require(msg.value > 0, "Deposit amount must be > 0");
-        require(nextIndex < uint32(2)**TREE_DEPTH, "Merkle tree is full");
+        require(nextIndex < uint32(2) ** TREE_DEPTH, "Merkle tree is full");
 
         // Insert commitment into Incremental Merkle Tree
         uint32 currentIndex = nextIndex;
@@ -88,7 +88,7 @@ contract PrivacyVerifier {
         }
 
         currentRoot = currentLevelHash;
-        
+
         emit Deposit(commitment, nextIndex);
         nextIndex += 1;
     }
@@ -102,12 +102,7 @@ contract PrivacyVerifier {
      * @param nullifier Nullifier hash to prevent double-spend
      * @param recipient Address to receive funds
      */
-    function withdraw(
-        bytes calldata journal,
-        bytes calldata seal,
-        bytes32 nullifier,
-        address recipient
-    ) external {
+    function withdraw(bytes calldata journal, bytes calldata seal, bytes32 nullifier, address recipient) external {
         // 1. Verify RISC0 proof
         verifier.verify(seal, IMAGE_ID, sha256(journal));
 
@@ -143,13 +138,8 @@ contract PrivacyVerifier {
      * Journal format: ABI-encoded TransactionOutput
      */
     function decodeJournal(bytes calldata journal) internal pure returns (TransactionOutput memory) {
-        (
-            bytes32 merkle_root,
-            bytes32 nullifier_hash,
-            address recipient,
-            uint256 amount,
-            bool is_valid
-        ) = abi.decode(journal, (bytes32, bytes32, address, uint256, bool));
+        (bytes32 merkle_root, bytes32 nullifier_hash, address recipient, uint256 amount, bool is_valid) =
+            abi.decode(journal, (bytes32, bytes32, address, uint256, bool));
 
         return TransactionOutput({
             merkle_root: merkle_root,

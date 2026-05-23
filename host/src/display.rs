@@ -41,11 +41,20 @@ pub fn print_verification_success() {
 
 // ─── Chain result ────────────────────────────────────────────
 
-pub fn print_chain_result(tx_hash: &[u8], block: Option<u64>, gas: Option<u128>, explorer_url: &str) {
+pub fn print_chain_result(
+    tx_hash: &[u8],
+    block: Option<u64>,
+    gas: Option<u128>,
+    explorer_url: &str,
+) {
     println!("SEPOLIA TESTNET:");
     println!("  Tx:       0x{}", hex_encode(tx_hash));
-    if let Some(b) = block { println!("  Block:    {}", b); }
-    if let Some(g) = gas   { println!("  Gas:      {}", g); }
+    if let Some(b) = block {
+        println!("  Block:    {}", b);
+    }
+    if let Some(g) = gas {
+        println!("  Gas:      {}", g);
+    }
     println!("  Explorer: {}", explorer_url);
     println!();
 }

@@ -3,8 +3,8 @@ use rand::RngCore;
 use risc0_zkvm::ExecutorEnv;
 use sha2::{Digest, Sha256};
 
-use crate::types::{ChainConfig, TransactionInput};
 use crate::chain;
+use crate::types::{ChainConfig, TransactionInput};
 
 /// Độ sâu cây Merkle – phải khớp với guest và smart contract
 /// TODO(on-chain): đổi thành depth của smart contract (thường là 20).
@@ -123,7 +123,7 @@ fn compute_merkle_path_for_index(
 }
 
 /// Build Merkle path từ danh sách commitments on-chain
-/// 
+///
 /// secret, amount: dùng tính leaf commit
 /// commitments: danh sách commitments từ on-chain (từ query events)
 pub fn build_merkle_for_note_on_chain(
@@ -134,13 +134,10 @@ pub fn build_merkle_for_note_on_chain(
     let leaf = compute_leaf(secret, amount);
 
     // Tìm index của leaf trong commitments
-    let leaf_index = commitments
-        .iter()
-        .position(|&c| c == leaf)
-        .context(
-            "Secret + Amount không tồn tại trên contract. \
+    let leaf_index = commitments.iter().position(|&c| c == leaf).context(
+        "Secret + Amount không tồn tại trên contract. \
              Bạn cần deposit với amount này trước.",
-        )?;
+    )?;
 
     Ok(compute_merkle_path_for_index(leaf_index, commitments))
 }
@@ -183,12 +180,10 @@ pub fn build_merkle_for_note(
 pub fn build_demo_input(amount: u64) -> TransactionInput {
     let secret = random_bytes32();
     let recipient = [
-        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00,
-        0x11, 0x22, 0xAA, 0xBB,
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+        0x00, 0x11, 0x22, 0xAA, 0xBB,
     ];
-    let (merkle_path, merkle_indices, merkle_root) =
-        build_merkle_for_note(&secret, amount);
+    let (merkle_path, merkle_indices, merkle_root) = build_merkle_for_note(&secret, amount);
 
     TransactionInput {
         secret,
@@ -202,7 +197,11 @@ pub fn build_demo_input(amount: u64) -> TransactionInput {
 
 /// Custom input: chỉ định recipient hex + amount.
 /// DEMO offline – không kết nối on-chain
-pub fn build_custom_input(recipient_hex: &str, amount: u64, secret_hex: Option<&str>) -> Result<TransactionInput> {
+pub fn build_custom_input(
+    recipient_hex: &str,
+    amount: u64,
+    secret_hex: Option<&str>,
+) -> Result<TransactionInput> {
     let secret = match secret_hex {
         Some(hex_str) => {
             let cleaned = hex_str.strip_prefix("0x").unwrap_or(hex_str);
@@ -219,8 +218,7 @@ pub fn build_custom_input(recipient_hex: &str, amount: u64, secret_hex: Option<&
 
     let recipient = parse_address(recipient_hex)
         .context("Địa chỉ recipient không hợp lệ (phải là hex 20-byte)")?;
-    let (merkle_path, merkle_indices, merkle_root) =
-        build_merkle_for_note(&secret, amount);
+    let (merkle_path, merkle_indices, merkle_root) = build_merkle_for_note(&secret, amount);
 
     Ok(TransactionInput {
         secret,
@@ -233,13 +231,13 @@ pub fn build_custom_input(recipient_hex: &str, amount: u64, secret_hex: Option<&
 }
 
 /// Build TransactionInput từ on-chain data
-/// 
+///
 /// Bắt buộc:
 /// - secret: hex string (32 bytes) – secret mà user đã dùng để deposit
 /// - amount: số tiền
 /// - recipient_hex: người nhận
 /// - config: chain config để query commitments
-/// 
+///
 /// Flow:
 /// 1. Query tất cả Deposit events từ contract
 /// 2. Rebuild Merkle tree từ commitments
@@ -255,7 +253,10 @@ pub async fn build_custom_input_on_chain(
     let secret_cleaned = secret_hex.strip_prefix("0x").unwrap_or(secret_hex);
     let secret_bytes = hex::decode(secret_cleaned).context("Secret hex decode thất bại")?;
     if secret_bytes.len() != 32 {
-        anyhow::bail!("Secret phải đúng 32 bytes, nhận được {}", secret_bytes.len());
+        anyhow::bail!(
+            "Secret phải đúng 32 bytes, nhận được {}",
+            secret_bytes.len()
+        );
     }
     let mut secret = [0u8; 32];
     secret.copy_from_slice(&secret_bytes);
@@ -266,7 +267,7 @@ pub async fn build_custom_input_on_chain(
 
     // Query commitments từ on-chain
     let commitments = chain::query_deposit_events(config).await?;
-    
+
     if commitments.is_empty() {
         anyhow::bail!(
             "Không có deposits trên contract. Hãy deposit trước ({:?}",

@@ -33,10 +33,7 @@ pub async fn submit_proof(
         .parse()
         .context("Parse private key thất bại")?;
 
-    let rpc_url = config
-        .rpc_url
-        .parse()
-        .context("Parse RPC URL thất bại")?;
+    let rpc_url = config.rpc_url.parse().context("Parse RPC URL thất bại")?;
 
     let provider = ProviderBuilder::new()
         .wallet(signer.clone())
@@ -53,15 +50,12 @@ pub async fn submit_proof(
             let mut encoded = Vec::with_capacity(selector.len() + groth16.seal.len());
             encoded.extend_from_slice(selector);
             encoded.extend_from_slice(groth16.seal.as_ref());
-            println!(
-                "Groth16 Seal (kèm EVM Selector, {} bytes).",
-                encoded.len()
-            );
+            println!("Groth16 Seal (kèm EVM Selector, {} bytes).", encoded.len());
             encoded
         }
         Err(_) => {
-            let json_bytes = serde_json::to_vec(&receipt.inner)
-                .context("Serialize receipt seal thất bại")?;
+            let json_bytes =
+                serde_json::to_vec(&receipt.inner).context("Serialize receipt seal thất bại")?;
             println!(
                 "Proof KHÔNG phải Groth16 - gửi dạng JSON ({} bytes). \
                  Contract sẽ từ chối nếu verifier yêu cầu Groth16!",
@@ -129,10 +123,7 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
 
     const BATCH_SIZE: u64 = 40_000;
 
-    let rpc_url = config
-        .rpc_url
-        .parse()
-        .context("Parse RPC URL thất bại")?;
+    let rpc_url = config.rpc_url.parse().context("Parse RPC URL thất bại")?;
 
     let provider = ProviderBuilder::new().connect_http(rpc_url);
 
@@ -181,15 +172,12 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
             .from_block(current)
             .to_block(end);
 
-        let logs = provider
-            .get_logs(&filter)
-            .await
-            .with_context(|| {
-                format!(
-                    "Query Deposit events thất bại (batch {}/{}, blocks {}-{})",
-                    batch_num, num_batches, current, end
-                )
-            })?;
+        let logs = provider.get_logs(&filter).await.with_context(|| {
+            format!(
+                "Query Deposit events thất bại (batch {}/{}, blocks {}-{})",
+                batch_num, num_batches, current, end
+            )
+        })?;
 
         let count = logs.len();
         if count > 0 {
@@ -213,10 +201,7 @@ pub async fn query_deposit_events(config: &ChainConfig) -> Result<Vec<[u8; 32]>>
         batch_num += 1;
     }
 
-    println!(
-        "Tổng cộng {} commitment(s) từ contract.",
-        commitments.len()
-    );
+    println!("Tổng cộng {} commitment(s) từ contract.", commitments.len());
 
     Ok(commitments)
 }
@@ -231,10 +216,7 @@ pub async fn get_wallet_balance(config: &ChainConfig) -> Result<U256> {
         .parse()
         .context("Parse private key thất bại")?;
 
-    let rpc_url = config
-        .rpc_url
-        .parse()
-        .context("Parse RPC URL thất bại")?;
+    let rpc_url = config.rpc_url.parse().context("Parse RPC URL thất bại")?;
 
     let provider = ProviderBuilder::new().connect_http(rpc_url);
 

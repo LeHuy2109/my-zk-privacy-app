@@ -5,7 +5,7 @@ mod groth16_docker;
 mod prover;
 mod types;
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::fs;
 
@@ -88,35 +88,41 @@ async fn main() -> Result<()> {
     if cli.submit_proof && !cli.chain {
         anyhow::bail!("--submit-proof yêu cầu --chain để gửi lên blockchain");
     }
-    
+
     // ── 1. Banner ────────────────────────────────────────────
     if !cli.json {
         display::print_banner();
-        
+
         let mut id_bytes = [0u8; 32];
         for (i, word) in methods::METHOD_ID.iter().enumerate() {
-            id_bytes[i*4..(i+1)*4].copy_from_slice(&word.to_le_bytes());
+            id_bytes[i * 4..(i + 1) * 4].copy_from_slice(&word.to_le_bytes());
         }
-        println!("🔑 IMAGE_ID (đang build): 0x{}\n", alloy::hex::encode(id_bytes));
+        println!(
+            "🔑 IMAGE_ID (đang build): 0x{}\n",
+            alloy::hex::encode(id_bytes)
+        );
     }
 
     if cli.deposit {
-        let secret_hex = cli.secret.as_deref().context("Cần truyền --secret khi chạy --deposit")?;
+        let secret_hex = cli
+            .secret
+            .as_deref()
+            .context("Cần truyền --secret khi chạy --deposit")?;
         let cleaned = secret_hex.strip_prefix("0x").unwrap_or(secret_hex);
         let secret_bytes = hex::decode(cleaned).context("Lỗi decode hex secret")?;
         anyhow::ensure!(secret_bytes.len() == 32, "Secret phải là 32 bytes hex");
-        
+
         let mut s = [0u8; 32];
         s.copy_from_slice(&secret_bytes);
-        
+
         let commitment = executor::compute_leaf(&s, cli.amount);
-        
+
         println!("TÍNH TOÁN LỆNH DEPOSIT:");
         println!("Secret Input: {}", secret_hex);
         println!("Amount      : {}", cli.amount);
         println!("Commitment  : 0x{}", alloy::hex::encode(commitment));
         println!("Chạy lệnh:");
-        
+
         // Try to load config from .env and fill in the actual values
         match ChainConfig::from_env() {
             Ok(config) if config.is_configured() => {
@@ -127,13 +133,13 @@ async fn main() -> Result<()> {
                     config.rpc_url,
                     config.private_key
                 );
-            },
+            }
             _ => {
                 println!("   cast send <CONTRACT_ADDRESS> \"deposit(bytes32)\" 0x{} --value {} --rpc-url <YOUR_RPC_URL> --private-key <YOUR_PK>", 
                     alloy::hex::encode(commitment), cli.amount);
             }
         }
-        
+
         return Ok(());
     }
 
@@ -142,14 +148,22 @@ async fn main() -> Result<()> {
         let config = if cli.chain {
             let config = ChainConfig::from_env()?;
             if !config.is_configured() {
-                anyhow::bail!("Thiếu cấu hình Sepolia (.env). Vui lòng cấu hình hợp lệ khi sử dụng --chain");
+                anyhow::bail!(
+                    "Thiếu cấu hình Sepolia (.env). Vui lòng cấu hình hợp lệ khi sử dụng --chain"
+                );
             }
             Some(config)
         } else {
             None
         };
-        let secret = cli.secret.as_deref().context("Cần truyền --secret khi chạy --generate-proof")?;
-        let recipient = cli.recipient.as_deref().context("Cần truyền --recipient khi chạy --generate-proof")?;
+        let secret = cli
+            .secret
+            .as_deref()
+            .context("Cần truyền --secret khi chạy --generate-proof")?;
+        let recipient = cli
+            .recipient
+            .as_deref()
+            .context("Cần truyền --recipient khi chạy --generate-proof")?;
 
         let input = if let Some(config) = &config {
             println!("Đang tải dữ liệu Merkle Tree từ Sepolia");
@@ -211,23 +225,27 @@ async fn main() -> Result<()> {
     let input = if cli.chain {
         let config = ChainConfig::from_env()?;
         if !config.is_configured() {
-            anyhow::bail!("Thiếu cấu hình Sepolia (.env). Vui lòng cấu hình hợp lệ khi sử dụng --chain");
+            anyhow::bail!(
+                "Thiếu cấu hình Sepolia (.env). Vui lòng cấu hình hợp lệ khi sử dụng --chain"
+            );
         }
-        let secret = cli.secret.as_deref().context("Cần truyền --secret khi chạy --chain")?;
-        let recipient = cli.recipient.as_deref().context("Cần truyền --recipient khi chạy --chain")?;
-        
+        let secret = cli
+            .secret
+            .as_deref()
+            .context("Cần truyền --secret khi chạy --chain")?;
+        let recipient = cli
+            .recipient
+            .as_deref()
+            .context("Cần truyền --recipient khi chạy --chain")?;
+
         println!("Đang tải dữ liệu Merkle Tree từ Sepolia");
         executor::build_custom_input_on_chain(secret, cli.amount, recipient, &config).await?
     } else {
         match &cli.recipient {
             // Khi chạy demo off-chain
             Some(recipient) => {
-                executor::build_custom_input(
-                    recipient, 
-                    cli.amount, 
-                    cli.secret.as_deref()
-                )?
-            },
+                executor::build_custom_input(recipient, cli.amount, cli.secret.as_deref())?
+            }
             None => executor::build_demo_input(cli.amount),
         }
     };
@@ -261,7 +279,8 @@ async fn main() -> Result<()> {
             display::print_chain_skipped();
         } else {
             println!("Đang gửi proof lên Sepolia testnet\n");
-            let chain_result = chain::submit_proof(&result.receipt, &result.output, &config).await?;
+            let chain_result =
+                chain::submit_proof(&result.receipt, &result.output, &config).await?;
             display::print_chain_result(
                 chain_result.tx_hash.as_ref(),
                 chain_result.block_number,
