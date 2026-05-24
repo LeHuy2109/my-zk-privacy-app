@@ -16,12 +16,15 @@ anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 dotenv = "0.15"
 tokio = { version = "1", features = ["full"] }
+futures-executor = "0.3"
+getrandom = "0.2"
 
 # Alloy v1 – dùng rustls (không cần libssl-dev)
 alloy = { version = "1", default-features = false, features = [
     "provider-http",
     "signer-local",
     "network",
+    "contract",
     "rpc-types",
     "consensus", "sol-types",
     "reqwest-rustls-tls",
