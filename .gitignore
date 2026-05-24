@@ -7,3 +7,4 @@ broadcast/
 .antigravityignore
 gen_secret.py
 results/
+contracts/generated/

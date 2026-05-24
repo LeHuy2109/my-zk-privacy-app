@@ -2,11 +2,12 @@
 pragma solidity ^0.8.20;
 
 import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
+import {ZkAuthImageID} from "./generated/ZkAuthImageID.sol";
 
 contract ZkAuthDemo {
     IRiscZeroVerifier public immutable verifier;
 
-    bytes32 public constant IMAGE_ID = 0xf148fe6157d2be1d925e790afa6e4da13dd8235cc0d60065c34437d6dbdd26c3;
+    bytes32 public constant IMAGE_ID = ZkAuthImageID.IMAGE_ID;
 
     struct Record {
         bytes32 payloadHash;
